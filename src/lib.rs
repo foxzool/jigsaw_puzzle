@@ -15,22 +15,12 @@ use std::vec;
 const DEFAULT_TAB_SIZE: f32 = 20.0;
 const DEFAULT_JITTER: f32 = 0.0;
 
-/// Provides all information on how to cut out the jigsaw puzzle pieces from an image
-#[derive(Clone, Debug)]
-pub struct JigsawTemplate {
-    /// SVG path for every jigsaw puzzle piece
-    pub svg_paths: Vec<String>,
-    /// The dimensions (width, length) in pixel
-    pub piece_dimensions: (f32, f32),
-    /// The number of pieces in the x- and the y-axis
-    pub number_of_pieces: (usize, usize),
-}
 
 /// A segment of an indented puzzle piece edge. A segment is described by a cubic Bézier curve,
 /// which includes a starting point, an end point and two control points. Three segments make up a
 /// piece's edge.
 #[derive(Clone, Debug)]
-struct IndentationSegment {
+pub struct IndentationSegment {
     /// Starting point of the segment
     pub starting_point: (f32, f32),
     /// End point of the segment
@@ -42,37 +32,16 @@ struct IndentationSegment {
 }
 
 impl IndentationSegment {
-    /// Return segment as SVG path. If reverse = true, return path from right to left for
-    /// horizontal edges and bottom to top for vertical edges.
-    pub fn as_path(&self, image: &mut DynamicImage, starting_point: (f32, f32), reverse: bool) -> String {
-        draw_cubic_bezier_curve_mut(
-            image,
-            self.starting_point,
-            self.end_point,
-            self.control_point_1,
-            self.control_point_2,
-            image::Rgba([0, 0, 255, 255]),
-        );
-        if reverse {
-            format!(
-                "C {},{} {},{} {},{}",
-                &self.control_point_2.0,
-                &self.control_point_2.1,
-                &self.control_point_1.0,
-                &self.control_point_1.1,
-                &self.starting_point.0,
-                &self.starting_point.1
-            )
-        } else {
-            format!(
-                "C {},{} {},{} {},{}",
-                &self.control_point_1.0,
-                &self.control_point_1.1,
-                &self.control_point_2.0,
-                &self.control_point_2.1,
-                &self.end_point.0,
-                &self.end_point.1
-            )
+    pub fn draw(&self, image: &mut DynamicImage, debug: bool) {
+        if debug {
+            draw_cubic_bezier_curve_mut(
+                image,
+                self.starting_point,
+                self.end_point,
+                self.control_point_1,
+                self.control_point_2,
+                image::Rgba([0, 0, 255, 255]),
+            );
         }
     }
 }
@@ -80,7 +49,7 @@ impl IndentationSegment {
 #[derive(Clone, Debug)]
 /// An indented puzzle piece edge. An edge is decribe via three distinct cubic Bézier curves (the
 /// "segments")
-struct IndentedEdge {
+pub struct IndentedEdge {
     /// Describes the left half for a horizontal edge, the upper half for a vertical edge
     pub first_segment: IndentationSegment,
     /// Describes the form of the tab
@@ -98,29 +67,25 @@ impl IndentedEdge {
     ) -> Self {
         generator.create(starting_point, end_point)
     }
-    /// Returns edge as SVG path. If reverse = true, returns path from right to left for horizontal
-    /// edges and bottom to top for vertical edges
-    pub fn as_path(&self, image: &mut DynamicImage, starting_point: (f32, f32), reverse: bool) -> String {
-        if reverse {
-            format!(
-                "{}  {}  {}",
-                &self.last_segment.as_path(image, starting_point, reverse),
-                &self.middle_segment.as_path(image, starting_point, reverse),
-                &self.first_segment.as_path(image, starting_point, reverse)
-            )
-        } else {
-            format!(
-                "{}  {}  {}",
-                &self.first_segment.as_path(image, starting_point, reverse),
-                &self.middle_segment.as_path(image, starting_point, reverse),
-                &self.last_segment.as_path(image, starting_point, reverse)
-            )
+
+    pub fn draw(&self, image: &mut DynamicImage, debug: bool) {
+        if debug {
+            draw_line_segment_mut(
+                image,
+                self.first_segment.starting_point,
+                self.last_segment.end_point,
+                image::Rgba([255, 0, 0, 255]),
+            );
         }
+        
+        self.first_segment.draw(image, debug);
+        self.middle_segment.draw(image, debug);
+        self.last_segment.draw(image, debug);
     }
 }
 
 /// Provides the means to generate [`IndentedEdge`]s
-struct EdgeContourGenerator {
+pub struct EdgeContourGenerator {
     /// The baseline width of a puzzle piece
     piece_width: f32,
     /// The baseline height of a puzzle piece
@@ -374,33 +339,21 @@ impl EdgeContourGenerator {
 #[derive(Clone, Debug)]
 /// A puzzle piece edge which is at the same time a part of the puzzle's border and therefore forms
 /// a straight line
-struct StraightEdge {
+pub struct StraightEdge {
     pub starting_point: (f32, f32),
     pub end_point: (f32, f32),
 }
 
 impl StraightEdge {
-    /// Returns edge as SVG path. If reverse = true, returns path from right to left for horizontal
-    /// edges and bottom to top for vertical edges
-    pub fn as_path(&self, image: &mut DynamicImage, starting_point: (f32, f32), reverse: bool) -> String {
-        draw_line_segment_mut(
-            image,
-            self.starting_point,
-            self.end_point,
-            image::Rgba([255, 0, 0, 255]),
-        );
-        if reverse {
-            format!("L {},{}", self.starting_point.0, self.starting_point.1)
-        } else {
-            format!("L {},{}", self.end_point.0, self.end_point.1)
-        }
+    pub fn draw(&self, _image: &mut DynamicImage, _debug: bool) {
+        // do nothing
     }
 }
 
 #[derive(Clone, Debug)]
 /// A border of a puzzle piece. Can be either an `StraightEdge` (no adjacent other piece) or an
 /// `IndentedEdge`
-enum Edge {
+pub enum Edge {
     IndentedEdge(IndentedEdge),
     StraightEdge(StraightEdge),
 }
@@ -408,10 +361,24 @@ enum Edge {
 impl Edge {
     /// Returns edge as SVG path. If reverse = true, returns path from right to left for horizontal
     /// edges and bottom to top for vertical edges
-    pub fn as_path(&self, image: &mut DynamicImage, starting_point: (f32, f32), reverse: bool) -> String {
+    pub fn as_path(&self, image: &mut DynamicImage, reverse: bool) {
         match self {
-            Edge::IndentedEdge(ie) => ie.as_path(image, starting_point, reverse),
-            Edge::StraightEdge(oe) => oe.as_path(image, starting_point, reverse),
+            Edge::IndentedEdge(ie) => ie.draw(image, reverse),
+            Edge::StraightEdge(oe) => oe.draw(image, reverse),
+        }
+    }
+
+    pub fn start_point(&self) -> (f32, f32) {
+        match self {
+            Edge::IndentedEdge(ie) => ie.first_segment.starting_point,
+            Edge::StraightEdge(oe) => oe.starting_point,
+        }
+    }
+
+    pub fn end_point(&self) -> (f32, f32) {
+        match self {
+            Edge::IndentedEdge(ie) => ie.last_segment.end_point,
+            Edge::StraightEdge(oe) => oe.end_point,
         }
     }
 }
@@ -434,26 +401,6 @@ pub fn round(x: f32) -> f32 {
     (x * 100.0).round() / 100.0
 }
 
-/// Takes the for edges of a "piece" and creates an SVG path around it. The path always starts in
-/// the upper left corner and proceeds clockwise.
-fn puzzle_piece(
-    image: &mut DynamicImage,
-    starting_point: (f32, f32),
-    top_edge: &Edge,
-    right_edge: &Edge,
-    bottom_edge: &Edge,
-    left_edge: &Edge,
-) -> String {
-    format!(
-        "M {},{}  {}  {}  {}  {}  Z",
-        starting_point.0,
-        starting_point.1,
-        top_edge.as_path(image, starting_point, false),
-        right_edge.as_path(image, starting_point, false),
-        bottom_edge.as_path(image, starting_point, true),
-        left_edge.as_path(image, starting_point, true)
-    )
-}
 
 /// Returns the indices of the top, right, bottom and left edge from a given `position` of the
 /// piece in a one-dimensional list of all pieces in the jigsaw puzzle. The returned indices are
@@ -633,28 +580,48 @@ pub fn build_jigsaw_template(
             let (top_index, right_index, bottom_index, left_index) =
                 get_border_indices(i, pieces_in_column);
 
+            println!("{}: {}, {}, {}, {}", i, top_index, right_index, bottom_index, left_index);
 
-            // draw_cubic_bezier_curve_mut(&mut image, (*x, *y), (*x, *y + piece_height), (*x + piece_width, *y + piece_height), (*x + piece_width, *y), image::Rgba([0, 0, 0, 255]));
-            puzzle_piece(
-                &mut image,
-                (*x, *y),
-                &horizontal_edges[top_index],
-                &vertical_edges[right_index],
-                &horizontal_edges[bottom_index],
-                &vertical_edges[left_index],
-            );
-            let mut tile = image.view(*x as u32, *y as u32, piece_width as u32, piece_height as u32).to_image();
+            let raw_tile = RawJigsawTile {
+                index: i,
+                debug: true,
+                starting_point: (*x, *y),
+                top_edge: horizontal_edges[top_index].clone(),
+                right_edge: vertical_edges[right_index].clone(),
+                bottom_edge: horizontal_edges[bottom_index].clone(),
+                left_edge: vertical_edges[left_index].clone(),
+            };
+
+            raw_tile.draw(&mut image);
+
+            let tile = image.view(*x as u32, *y as u32, piece_width as u32, piece_height as u32).to_image();
             tile.save(format!("tiles/puzzle_piece_{}.png", i)).expect("Failed to save piece");
 
             i += 1;
         }
     };
-    // JigsawTemplate {
-    //     svg_paths,
-    //     piece_dimensions: (piece_width, piece_height),
-    //     number_of_pieces: (pieces_in_column, pieces_in_row),
-    // }
     image
+}
+
+
+#[derive(Debug)]
+pub struct RawJigsawTile {
+    pub index: usize,
+    pub debug: bool,
+    pub starting_point: (f32, f32),
+    pub top_edge: Edge,
+    pub right_edge: Edge,
+    pub bottom_edge: Edge,
+    pub left_edge: Edge,
+}
+
+impl RawJigsawTile {
+    pub fn draw(&self, image: &mut DynamicImage) {
+        self.top_edge.as_path(image, self.debug);
+        self.right_edge.as_path(image, self.debug);
+        self.bottom_edge.as_path(image, self.debug);
+        self.left_edge.as_path(image, self.debug);
+    }
 }
 
 #[cfg(test)]
@@ -664,7 +631,7 @@ mod tests {
     #[test]
     fn test_divide_axis() {
         let res = divide_axis(1000.0, 4);
-        assert!(res.0.len() == 4);
+        assert_eq!(res.0.len(), 4);
         assert!(res.1 > 249.0 && res.1 < 251.0);
     }
 
