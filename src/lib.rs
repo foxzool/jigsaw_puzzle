@@ -8,9 +8,7 @@
 //! - [`round`] is a util function which approximately rounds a f32 value to two decimal places
 
 use image::{DynamicImage, GenericImageView};
-use imageproc::drawing::{
-    draw_cubic_bezier_curve_mut, draw_hollow_circle_mut, draw_line_segment_mut,
-};
+use imageproc::drawing::{draw_cubic_bezier_curve_mut, draw_line_segment_mut};
 use std::f32;
 use std::vec;
 
@@ -33,43 +31,15 @@ pub struct IndentationSegment {
 }
 
 impl IndentationSegment {
-    pub fn draw(&self, image: &mut DynamicImage, debug: bool) {
-        if debug {
-            draw_hollow_circle_mut(
-                image,
-                (self.starting_point.0 as i32, self.starting_point.1 as i32),
-                2,
-                image::Rgba([255, 0, 0, 255]),
-            );
-            // draw_hollow_circle_mut(
-            //     image,
-            //     (self.control_point_1.0 as i32, self.control_point_1.1 as i32),
-            //     2,
-            //     image::Rgba([255, 0, 255, 255]),
-            // );
-            // draw_hollow_circle_mut(
-            //     image,
-            //     (self.control_point_2.0 as i32, self.control_point_2.1 as i32),
-            //     2,
-            //     image::Rgba([255, 255, 255, 255]),
-            // );
-
-            draw_hollow_circle_mut(
-                image,
-                (self.end_point.0 as i32, self.end_point.1 as i32),
-                2,
-                image::Rgba([255, 0, 0, 255]),
-            );
-
-            draw_cubic_bezier_curve_mut(
-                image,
-                self.starting_point,
-                self.end_point,
-                self.control_point_1,
-                self.control_point_2,
-                image::Rgba([0, 0, 255, 255]),
-            );
-        }
+    pub fn draw(&self, image: &mut DynamicImage) {
+        draw_cubic_bezier_curve_mut(
+            image,
+            self.starting_point,
+            self.end_point,
+            self.control_point_1,
+            self.control_point_2,
+            image::Rgba([0, 0, 255, 255]),
+        );
     }
 }
 
@@ -84,8 +54,10 @@ pub struct IndentedEdge {
     /// Describes the right half for a horizontal edge, the lower half for a vertical edge
     pub last_segment: IndentationSegment,
 
-    pub generate: EdgeContourGenerator,
+    pub generator: EdgeContourGenerator,
 }
+
+const RED_COLOR: image::Rgba<u8> = image::Rgba([255, 0, 0, 255]);
 
 impl IndentedEdge {
     /// Creates a new indented edge
@@ -97,85 +69,85 @@ impl IndentedEdge {
         generator.create(starting_point, end_point)
     }
 
-    pub fn draw(&self, image: &mut DynamicImage, side: Side, debug: bool) {
-        let is_tab = self.is_tab(side);
-        println!("{:?}  is tab: {}", side, is_tab);
-        let off_size = if self.is_tab(side) {
-            self.generate.tab_size * 200.0 * 2.0
+    fn calc_offset(&self, side: Side) -> f32 {
+        if self.is_tab(side) {
+            self.generator.tab_size * 200.0 * 2.0
         } else {
             10.0
-        };
-        if debug {
-            match side {
-                Side::Top => {
-                    draw_line_segment_mut(
-                        image,
-                        (
-                            self.first_segment.starting_point.0,
-                            self.first_segment.starting_point.1 - off_size,
-                        ),
-                        (
-                            self.last_segment.end_point.0,
-                            self.last_segment.end_point.1 - off_size,
-                        ),
-                        image::Rgba([0, 255, 255, 255]),
-                    );
-                }
-                Side::Right => {
-                    draw_line_segment_mut(
-                        image,
-                        (
-                            self.first_segment.starting_point.0 + off_size,
-                            self.first_segment.starting_point.1,
-                        ),
-                        (
-                            self.last_segment.end_point.0 + off_size,
-                            self.last_segment.end_point.1,
-                        ),
-                        image::Rgba([0, 255, 255, 255]),
-                    );
-                }
-                Side::Bottom => {
-                    draw_line_segment_mut(
-                        image,
-                        (
-                            self.first_segment.starting_point.0,
-                            self.first_segment.starting_point.1 + off_size,
-                        ),
-                        (
-                            self.last_segment.end_point.0,
-                            self.last_segment.end_point.1 + off_size,
-                        ),
-                        image::Rgba([0, 255, 0, 255]),
-                    );
-                }
-                Side::Left => {
-                    draw_line_segment_mut(
-                        image,
-                        (
-                            self.first_segment.starting_point.0 - off_size,
-                            self.first_segment.starting_point.1,
-                        ),
-                        (
-                            self.last_segment.end_point.0 - off_size,
-                            self.last_segment.end_point.1,
-                        ),
-                        image::Rgba([0, 255, 0, 255]),
-                    );
-                }
-            }
-
-            draw_line_segment_mut(
-                image,
-                self.first_segment.starting_point,
-                self.last_segment.end_point,
-                image::Rgba([255, 0, 0, 255]),
-            );
         }
+    }
 
-        self.first_segment.draw(image, debug);
-        self.middle_segment.draw(image, debug);
-        self.last_segment.draw(image, debug);
+    pub fn draw(&self, image: &mut DynamicImage, side: Side) {
+        let off_size = self.calc_offset(side);
+        // match side {
+        //     Side::Top => {
+        //         draw_line_segment_mut(
+        //             image,
+        //             (
+        //                 self.first_segment.starting_point.0,
+        //                 self.first_segment.starting_point.1 - off_size,
+        //             ),
+        //             (
+        //                 self.last_segment.end_point.0,
+        //                 self.last_segment.end_point.1 - off_size,
+        //             ),
+        //             RED_COLOR,
+        //         );
+        //     }
+        //     Side::Right => {
+        //         draw_line_segment_mut(
+        //             image,
+        //             (
+        //                 self.first_segment.starting_point.0 + off_size,
+        //                 self.first_segment.starting_point.1,
+        //             ),
+        //             (
+        //                 self.last_segment.end_point.0 + off_size,
+        //                 self.last_segment.end_point.1,
+        //             ),
+        //             RED_COLOR,
+        //         );
+        //     }
+        //     Side::Bottom => {
+        //         // draw_line_segment_mut(
+        //         //     image,
+        //         //     (
+        //         //         self.first_segment.starting_point.0,
+        //         //         self.first_segment.starting_point.1 + off_size,
+        //         //     ),
+        //         //     (
+        //         //         self.last_segment.end_point.0,
+        //         //         self.last_segment.end_point.1 + off_size,
+        //         //     ),
+        //         //     RED_COLOR,
+        //         // );
+        //     }
+        //     Side::Left => {
+        //         // draw_line_segment_mut(
+        //         //     image,
+        //         //     (
+        //         //         self.first_segment.starting_point.0 - off_size,
+        //         //         self.first_segment.starting_point.1,
+        //         //     ),
+        //         //     (
+        //         //         self.last_segment.end_point.0 - off_size,
+        //         //         self.last_segment.end_point.1,
+        //         //     ),
+        //         //     RED_COLOR,
+        //         // );
+        //     }
+        // }
+
+        self.first_segment.draw(image);
+        self.middle_segment.draw(image);
+        self.last_segment.draw(image);
+
+        draw_line_segment_mut(
+            image,
+            self.first_segment.starting_point,
+            self.last_segment.end_point,
+            image::Rgba([255, 0, 0, 255]),
+        );
     }
 
     pub fn is_tab(&self, side: Side) -> bool {
@@ -427,7 +399,7 @@ impl EdgeContourGenerator {
             first_segment,
             middle_segment,
             last_segment,
-            generate: self.clone(),
+            generator: self.clone(),
         };
         (
             self.seed,
@@ -451,13 +423,8 @@ pub struct StraightEdge {
 }
 
 impl StraightEdge {
-    pub fn draw(&self, _image: &mut DynamicImage, debug: bool) {
-        if debug {
-            println!(
-                " Drawing straight edge from {:?} to {:?}",
-                self.starting_point, self.end_point
-            );
-        }
+    pub fn draw(&self, image: &mut DynamicImage) {
+        draw_line_segment_mut(image, self.starting_point, self.end_point, RED_COLOR);
     }
 }
 
@@ -470,10 +437,10 @@ pub enum Edge {
 }
 
 impl Edge {
-    pub fn draw(&self, image: &mut DynamicImage, side: Side, debug: bool) {
+    pub fn draw(&self, image: &mut DynamicImage, side: Side) {
         match self {
-            Edge::IndentedEdge(ie) => ie.draw(image, side, debug),
-            Edge::StraightEdge(oe) => oe.draw(image, debug),
+            Edge::IndentedEdge(ie) => ie.draw(image, side),
+            Edge::StraightEdge(oe) => oe.draw(image),
         }
     }
 
@@ -488,6 +455,13 @@ impl Edge {
         match self {
             Edge::IndentedEdge(ie) => ie.last_segment.end_point,
             Edge::StraightEdge(oe) => oe.end_point,
+        }
+    }
+
+    pub fn offset(&self, side: Side) -> f32 {
+        match self {
+            Edge::IndentedEdge(ie) => ie.calc_offset(side),
+            Edge::StraightEdge(_) => 0.0,
         }
     }
 }
@@ -705,6 +679,7 @@ pub fn build_jigsaw_template(
             };
 
             raw_tile.draw(&mut image);
+            raw_tile.crop(i, &mut image);
 
             // let tile = image.view(*x as u32, *y as u32, piece_width as u32, piece_height as u32).to_image();
             // tile.save(format!("tiles/puzzle_piece_{}.png", i)).expect("Failed to save piece");
@@ -730,13 +705,28 @@ impl RawJigsawTile {
     pub fn draw(&self, image: &mut DynamicImage) {
         println!("Drawing tile {}", self.index);
         print!("top_edge ");
-        self.top_edge.draw(image, Side::Top, self.debug);
+        self.top_edge.draw(image, Side::Top);
         print!("right_edge ");
-        self.right_edge.draw(image, Side::Right, self.debug);
+        self.right_edge.draw(image, Side::Right);
         print!("bottom_edge ");
-        self.bottom_edge.draw(image, Side::Bottom, self.debug);
+        self.bottom_edge.draw(image, Side::Bottom);
         print!("left_edge ");
-        self.left_edge.draw(image, Side::Left, self.debug);
+        self.left_edge.draw(image, Side::Left);
+    }
+
+    pub fn crop(&self, i: usize, image: &mut DynamicImage) {
+        let x = (self.starting_point.0 - self.left_edge.offset(Side::Left)) as u32;
+        let y = (self.starting_point.1 - self.top_edge.offset(Side::Top)) as u32;
+        let width = ((self.right_edge.start_point().0 + self.right_edge.offset(Side::Right))
+            - (self.left_edge.start_point().0 - self.left_edge.offset(Side::Left)))
+            as u32;
+        let height = ((self.bottom_edge.start_point().1 + self.bottom_edge.offset(Side::Bottom))
+            - (self.top_edge.start_point().1 - self.top_edge.offset(Side::Top)))
+            as u32;
+        println!("Cropping tile {} at {}, {}, {}, {}", i, x, y, width, height);
+        let tile = image.view(x, y, width, height).to_image();
+        tile.save(format!("tiles/puzzle_piece_{}.png", i))
+            .expect("Failed to save piece");
     }
 }
 
