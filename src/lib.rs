@@ -8,13 +8,14 @@
 //! - [`round`] is a util function which approximately rounds a f32 value to two decimal places
 
 use image::{DynamicImage, GenericImageView};
-use imageproc::drawing::{draw_cubic_bezier_curve_mut, draw_line_segment_mut};
+use imageproc::drawing::{
+    draw_cubic_bezier_curve_mut, draw_hollow_circle_mut, draw_line_segment_mut,
+};
 use std::f32;
 use std::vec;
 
 const DEFAULT_TAB_SIZE: f32 = 20.0;
 const DEFAULT_JITTER: f32 = 0.0;
-
 
 /// A segment of an indented puzzle piece edge. A segment is described by a cubic Bézier curve,
 /// which includes a starting point, an end point and two control points. Three segments make up a
@@ -34,6 +35,32 @@ pub struct IndentationSegment {
 impl IndentationSegment {
     pub fn draw(&self, image: &mut DynamicImage, debug: bool) {
         if debug {
+            draw_hollow_circle_mut(
+                image,
+                (self.starting_point.0 as i32, self.starting_point.1 as i32),
+                2,
+                image::Rgba([255, 0, 0, 255]),
+            );
+            // draw_hollow_circle_mut(
+            //     image,
+            //     (self.control_point_1.0 as i32, self.control_point_1.1 as i32),
+            //     2,
+            //     image::Rgba([255, 0, 255, 255]),
+            // );
+            // draw_hollow_circle_mut(
+            //     image,
+            //     (self.control_point_2.0 as i32, self.control_point_2.1 as i32),
+            //     2,
+            //     image::Rgba([255, 255, 255, 255]),
+            // );
+
+            draw_hollow_circle_mut(
+                image,
+                (self.end_point.0 as i32, self.end_point.1 as i32),
+                2,
+                image::Rgba([255, 0, 0, 255]),
+            );
+
             draw_cubic_bezier_curve_mut(
                 image,
                 self.starting_point,
@@ -56,6 +83,8 @@ pub struct IndentedEdge {
     pub middle_segment: IndentationSegment,
     /// Describes the right half for a horizontal edge, the lower half for a vertical edge
     pub last_segment: IndentationSegment,
+
+    pub generate: EdgeContourGenerator,
 }
 
 impl IndentedEdge {
@@ -68,8 +97,74 @@ impl IndentedEdge {
         generator.create(starting_point, end_point)
     }
 
-    pub fn draw(&self, image: &mut DynamicImage, debug: bool) {
+    pub fn draw(&self, image: &mut DynamicImage, side: Side, debug: bool) {
+        let is_tab = self.is_tab(side);
+        println!("{:?}  is tab: {}", side, is_tab);
+        let off_size = if self.is_tab(side) {
+            self.generate.tab_size * 200.0 * 2.0
+        } else {
+            10.0
+        };
         if debug {
+            match side {
+                Side::Top => {
+                    draw_line_segment_mut(
+                        image,
+                        (
+                            self.first_segment.starting_point.0,
+                            self.first_segment.starting_point.1 - off_size,
+                        ),
+                        (
+                            self.last_segment.end_point.0,
+                            self.last_segment.end_point.1 - off_size,
+                        ),
+                        image::Rgba([0, 255, 255, 255]),
+                    );
+                }
+                Side::Right => {
+                    draw_line_segment_mut(
+                        image,
+                        (
+                            self.first_segment.starting_point.0 + off_size,
+                            self.first_segment.starting_point.1,
+                        ),
+                        (
+                            self.last_segment.end_point.0 + off_size,
+                            self.last_segment.end_point.1,
+                        ),
+                        image::Rgba([0, 255, 255, 255]),
+                    );
+                }
+                Side::Bottom => {
+                    draw_line_segment_mut(
+                        image,
+                        (
+                            self.first_segment.starting_point.0,
+                            self.first_segment.starting_point.1 + off_size,
+                        ),
+                        (
+                            self.last_segment.end_point.0,
+                            self.last_segment.end_point.1 + off_size,
+                        ),
+                        image::Rgba([0, 255, 0, 255]),
+                    );
+                }
+                Side::Left => {
+                    draw_line_segment_mut(
+                        image,
+                        (
+                            self.first_segment.starting_point.0 - off_size,
+                            self.first_segment.starting_point.1,
+                        ),
+                        (
+                            self.last_segment.end_point.0 - off_size,
+                            self.last_segment.end_point.1,
+                        ),
+                        image::Rgba([0, 255, 0, 255]),
+                    );
+                }
+            }
+
             draw_line_segment_mut(
                 image,
                 self.first_segment.starting_point,
@@ -77,14 +172,24 @@ impl IndentedEdge {
                 image::Rgba([255, 0, 0, 255]),
             );
         }
-        
+
         self.first_segment.draw(image, debug);
         self.middle_segment.draw(image, debug);
         self.last_segment.draw(image, debug);
     }
+
+    pub fn is_tab(&self, side: Side) -> bool {
+        match side {
+            Side::Top => self.first_segment.starting_point.1 > self.first_segment.end_point.1,
+            Side::Right => self.first_segment.starting_point.0 < self.first_segment.end_point.0,
+            Side::Bottom => self.first_segment.starting_point.1 < self.first_segment.end_point.1,
+            Side::Left => self.first_segment.starting_point.0 > self.first_segment.end_point.0,
+        }
+    }
 }
 
 /// Provides the means to generate [`IndentedEdge`]s
+#[derive(Debug, Clone)]
 pub struct EdgeContourGenerator {
     /// The baseline width of a puzzle piece
     piece_width: f32,
@@ -183,7 +288,7 @@ impl EdgeContourGenerator {
     }
 
     /// Gets the coordinates of a point in a cubic Bézier curve relative to a starting point, the
-    /// length and the direction of the edge (horizontal, vertical) and finally two coefficients
+    /// length and the side of the edge (horizontal, vertical) and finally two coefficients
     /// which designate the offset of the respective points on the longitudinal (`l_coeff`) and the
     /// transverse (`t_coeff`) axes.
     fn coords(
@@ -322,6 +427,7 @@ impl EdgeContourGenerator {
             first_segment,
             middle_segment,
             last_segment,
+            generate: self.clone(),
         };
         (
             self.seed,
@@ -345,8 +451,13 @@ pub struct StraightEdge {
 }
 
 impl StraightEdge {
-    pub fn draw(&self, _image: &mut DynamicImage, _debug: bool) {
-        // do nothing
+    pub fn draw(&self, _image: &mut DynamicImage, debug: bool) {
+        if debug {
+            println!(
+                " Drawing straight edge from {:?} to {:?}",
+                self.starting_point, self.end_point
+            );
+        }
     }
 }
 
@@ -359,12 +470,10 @@ pub enum Edge {
 }
 
 impl Edge {
-    /// Returns edge as SVG path. If reverse = true, returns path from right to left for horizontal
-    /// edges and bottom to top for vertical edges
-    pub fn as_path(&self, image: &mut DynamicImage, reverse: bool) {
+    pub fn draw(&self, image: &mut DynamicImage, side: Side, debug: bool) {
         match self {
-            Edge::IndentedEdge(ie) => ie.draw(image, reverse),
-            Edge::StraightEdge(oe) => oe.draw(image, reverse),
+            Edge::IndentedEdge(ie) => ie.draw(image, side, debug),
+            Edge::StraightEdge(oe) => oe.draw(image, debug),
         }
     }
 
@@ -400,7 +509,6 @@ fn divide_axis(length: f32, piece_num: usize) -> (Vec<f32>, f32) {
 pub fn round(x: f32) -> f32 {
     (x * 100.0).round() / 100.0
 }
-
 
 /// Returns the indices of the top, right, bottom and left edge from a given `position` of the
 /// piece in a one-dimensional list of all pieces in the jigsaw puzzle. The returned indices are
@@ -453,7 +561,7 @@ fn optimal_aspect_ratio(
     image_width: f32,
     image_height: f32,
 ) -> (usize, usize) {
-    let mut width_height_diff = std::f32::MAX;
+    let mut width_height_diff = f32::MAX;
     let mut number_of_pieces = *possible_dimensions
         .first()
         .expect("No possible dimensions found. This error should never happen!");
@@ -573,6 +681,7 @@ pub fn build_jigsaw_template(
             ),
         }))
     }
+
     let mut i = 0;
     let mut image = image.clone();
     for y in starting_points_y.iter() {
@@ -580,7 +689,10 @@ pub fn build_jigsaw_template(
             let (top_index, right_index, bottom_index, left_index) =
                 get_border_indices(i, pieces_in_column);
 
-            println!("{}: {}, {}, {}, {}", i, top_index, right_index, bottom_index, left_index);
+            println!(
+                "{}: {}, {}, {}, {}",
+                i, top_index, right_index, bottom_index, left_index
+            );
 
             let raw_tile = RawJigsawTile {
                 index: i,
@@ -594,15 +706,14 @@ pub fn build_jigsaw_template(
 
             raw_tile.draw(&mut image);
 
-            let tile = image.view(*x as u32, *y as u32, piece_width as u32, piece_height as u32).to_image();
-            tile.save(format!("tiles/puzzle_piece_{}.png", i)).expect("Failed to save piece");
+            // let tile = image.view(*x as u32, *y as u32, piece_width as u32, piece_height as u32).to_image();
+            // tile.save(format!("tiles/puzzle_piece_{}.png", i)).expect("Failed to save piece");
 
             i += 1;
         }
-    };
+    }
     image
 }
-
 
 #[derive(Debug)]
 pub struct RawJigsawTile {
@@ -617,11 +728,24 @@ pub struct RawJigsawTile {
 
 impl RawJigsawTile {
     pub fn draw(&self, image: &mut DynamicImage) {
-        self.top_edge.as_path(image, self.debug);
-        self.right_edge.as_path(image, self.debug);
-        self.bottom_edge.as_path(image, self.debug);
-        self.left_edge.as_path(image, self.debug);
+        println!("Drawing tile {}", self.index);
+        print!("top_edge ");
+        self.top_edge.draw(image, Side::Top, self.debug);
+        print!("right_edge ");
+        self.right_edge.draw(image, Side::Right, self.debug);
+        print!("bottom_edge ");
+        self.bottom_edge.draw(image, Side::Bottom, self.debug);
+        print!("left_edge ");
+        self.left_edge.draw(image, Side::Left, self.debug);
     }
+}
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum Side {
+    Top,
+    Right,
+    Bottom,
+    Left,
 }
 
 #[cfg(test)]
@@ -638,7 +762,7 @@ mod tests {
     #[test]
     fn test_divisor_pairs() {
         let given_number = 1;
-        assert_eq!(find_divisors(given_number), vec![(1, 1), ]);
+        assert_eq!(find_divisors(given_number), vec![(1, 1),]);
 
         let given_number = 24;
         assert_eq!(
@@ -656,7 +780,7 @@ mod tests {
         );
 
         let given_number = 9;
-        assert_eq!(find_divisors(given_number), vec![(1, 9), (3, 3), (9, 1), ])
+        assert_eq!(find_divisors(given_number), vec![(1, 9), (3, 3), (9, 1),])
     }
 
     #[test]
