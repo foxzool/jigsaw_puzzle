@@ -4,5 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+bezier-rs = "0.4.0"
+
 image = "0.25.4"
 imageproc = "0.25.0"

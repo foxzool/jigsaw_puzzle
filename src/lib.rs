@@ -7,6 +7,7 @@
 //! for a given total number of pieces
 //! - [`round`] is a util function which approximately rounds a f32 value to two decimal places
 
+use bezier_rs::{Bezier, BezierHandles, Identifier, Subpath};
 use image::{DynamicImage, GenericImageView};
 use imageproc::drawing::{draw_cubic_bezier_curve_mut, draw_line_segment_mut};
 use std::f32;
@@ -31,6 +32,31 @@ pub struct IndentationSegment {
 }
 
 impl IndentationSegment {
+    pub fn to_bezier(&self, reverse: bool) -> Bezier {
+        if reverse {
+            Bezier::from_cubic_coordinates(
+                self.end_point.0 as f64,
+                self.end_point.1 as f64,
+                self.control_point_2.0 as f64,
+                self.control_point_2.1 as f64,
+                self.control_point_1.0 as f64,
+                self.control_point_1.1 as f64,
+                self.starting_point.0 as f64,
+                self.starting_point.1 as f64,
+            )
+        } else {
+            Bezier::from_cubic_coordinates(
+                self.starting_point.0 as f64,
+                self.starting_point.1 as f64,
+                self.control_point_1.0 as f64,
+                self.control_point_1.1 as f64,
+                self.control_point_2.0 as f64,
+                self.control_point_2.1 as f64,
+                self.end_point.0 as f64,
+                self.end_point.1 as f64,
+            )
+        }
+    }
     pub fn draw(&self, image: &mut DynamicImage) {
         draw_cubic_bezier_curve_mut(
             image,
@@ -58,6 +84,7 @@ pub struct IndentedEdge {
 }
 
 const RED_COLOR: image::Rgba<u8> = image::Rgba([255, 0, 0, 255]);
+const YElLOW_COLOR: image::Rgba<u8> = image::Rgba([255, 255, 0, 255]);
 
 impl IndentedEdge {
     /// Creates a new indented edge
@@ -67,6 +94,22 @@ impl IndentedEdge {
         generator: &mut EdgeContourGenerator,
     ) -> Self {
         generator.create(starting_point, end_point)
+    }
+
+    pub fn to_beziers(self, reverse: bool) -> Vec<Bezier> {
+        if reverse {
+            vec![
+                self.last_segment.to_bezier(reverse),
+                self.middle_segment.to_bezier(reverse),
+                self.first_segment.to_bezier(reverse),
+            ]
+        } else {
+            vec![
+                self.first_segment.to_bezier(reverse),
+                self.middle_segment.to_bezier(reverse),
+                self.last_segment.to_bezier(reverse),
+            ]
+        }
     }
 
     fn calc_offset(&self, side: Side) -> f32 {
@@ -423,6 +466,23 @@ pub struct StraightEdge {
 }
 
 impl StraightEdge {
+    pub fn to_beziers(&self, reverse: bool) -> Vec<Bezier> {
+        if reverse {
+            vec![Bezier::from_linear_coordinates(
+                self.end_point.0 as f64,
+                self.end_point.1 as f64,
+                self.starting_point.0 as f64,
+                self.starting_point.1 as f64,
+            )]
+        } else {
+            vec![Bezier::from_linear_coordinates(
+                self.starting_point.0 as f64,
+                self.starting_point.1 as f64,
+                self.end_point.0 as f64,
+                self.end_point.1 as f64,
+            )]
+        }
+    }
     pub fn draw(&self, image: &mut DynamicImage) {
         draw_line_segment_mut(image, self.starting_point, self.end_point, RED_COLOR);
     }
@@ -437,6 +497,13 @@ pub enum Edge {
 }
 
 impl Edge {
+    pub fn to_beziers(self, reverse: bool) -> Vec<Bezier> {
+        match self {
+            Edge::IndentedEdge(ie) => ie.to_beziers(reverse),
+            Edge::StraightEdge(oe) => oe.to_beziers(reverse),
+        }
+    }
+
     pub fn draw(&self, image: &mut DynamicImage, side: Side) {
         match self {
             Edge::IndentedEdge(ie) => ie.draw(image, side),
@@ -656,38 +723,124 @@ pub fn build_jigsaw_template(
         }))
     }
 
+    let piece_width_offset = (piece_width * 0.05) as f64;
+    let piece_height_offset = (piece_height * 0.05) as f64;
+    let mut bezier_list = vec![];
     let mut i = 0;
-    let mut image = image.clone();
+
     for y in starting_points_y.iter() {
         for x in starting_points_x.iter() {
             let (top_index, right_index, bottom_index, left_index) =
                 get_border_indices(i, pieces_in_column);
-
-            println!(
-                "{}: {}, {}, {}, {}",
-                i, top_index, right_index, bottom_index, left_index
+            let mut image = image.clone();
+            let raw_tile = RawJigsawTile::new(
+                i,
+                (*x, *y),
+                horizontal_edges[top_index].clone(),
+                vertical_edges[right_index].clone(),
+                horizontal_edges[bottom_index].clone(),
+                vertical_edges[left_index].clone(),
             );
+            bezier_list.push(raw_tile.beziers.clone());
 
-            let raw_tile = RawJigsawTile {
-                index: i,
-                debug: true,
-                starting_point: (*x, *y),
-                top_edge: horizontal_edges[top_index].clone(),
-                right_edge: vertical_edges[right_index].clone(),
-                bottom_edge: horizontal_edges[bottom_index].clone(),
-                left_edge: vertical_edges[left_index].clone(),
-            };
+            let sub_path: Subpath<PuzzleId> = Subpath::from_beziers(&raw_tile.beziers, true);
+            // draw debug line
+            draw_debug_line(&mut image, &sub_path);
+            let [box_min, box_max] = sub_path.bounding_box().expect("Failed to get bounding box");
+            let top_left_x = (box_min.x - piece_width_offset).max(0.0);
+            let top_left_y = (box_min.y - piece_height_offset).max(0.0);
+            let mut width =
+                (box_max.x - box_min.x + 2.0 * piece_width_offset).max(piece_width as f64);
+            let mut height =
+                (box_max.y - box_min.y + 2.0 * piece_height_offset).max(piece_height as f64);
+            if top_left_x + width > image_width as f64 {
+                width = image_width as f64 - top_left_x + 1.0;
+            }
+            if top_left_y + height > image_height as f64 {
+                height = (image_height as f64 - top_left_y) + 1.0;
+            }
 
-            raw_tile.draw(&mut image);
-            raw_tile.crop(i, &mut image);
-
-            // let tile = image.view(*x as u32, *y as u32, piece_width as u32, piece_height as u32).to_image();
-            // tile.save(format!("tiles/puzzle_piece_{}.png", i)).expect("Failed to save piece");
+            // draw debug bbox
+            // draw_hollow_rect_mut(
+            //     &mut image,
+            //     Rect::at(top_left_x as i32, top_left_y as i32).of_size(width as u32, height as u32),
+            //     YElLOW_COLOR,
+            // );
+            let tile = image
+                .view(
+                    top_left_x as u32,
+                    top_left_y as u32,
+                    width as u32,
+                    height as u32,
+                )
+                .to_image();
+            tile.save(format!("tiles/puzzle_piece_{}.png", i))
+                .expect("Failed to save piece");
 
             i += 1;
         }
     }
+
+    // let beziers: Vec<Bezier> = bezier_list.into_iter().flatten().collect();
+    // let sub_path: Subpath<PuzzleId> = Subpath::from_beziers(&beziers, true);
+    //
+    // for path in sub_path.iter() {
+    //     match path.handles {
+    //         BezierHandles::Linear => {
+    //             draw_line_segment_mut(
+    //                 &mut image,
+    //                 (path.start.x as f32, path.start.y as f32),
+    //                 (path.end.x as f32, path.end.y as f32),
+    //                 RED_COLOR,
+    //             );
+    //         }
+    //         BezierHandles::Quadratic { .. } => {}
+    //         BezierHandles::Cubic {
+    //             handle_start,
+    //             handle_end,
+    //         } => {
+    //             draw_cubic_bezier_curve_mut(
+    //                 &mut image,
+    //                 (path.start.x as f32, path.start.y as f32),
+    //                 (path.end.x as f32, path.end.y as f32),
+    //                 (handle_start.x as f32, handle_start.y as f32),
+    //                 (handle_end.x as f32, handle_end.y as f32),
+    //                 RED_COLOR,
+    //             );
+    //         }
+    //     }
+    // }
+
     image
+}
+
+fn draw_debug_line(image: &mut DynamicImage, sub_path: &Subpath<PuzzleId>) {
+    for path in sub_path.iter() {
+        match path.handles {
+            BezierHandles::Linear => {
+                draw_line_segment_mut(
+                    image,
+                    (path.start.x as f32, path.start.y as f32),
+                    (path.end.x as f32, path.end.y as f32),
+                    RED_COLOR,
+                );
+            }
+            BezierHandles::Quadratic { .. } => {}
+            BezierHandles::Cubic {
+                handle_start,
+                handle_end,
+            } => {
+                draw_cubic_bezier_curve_mut(
+                    image,
+                    (path.start.x as f32, path.start.y as f32),
+                    (path.end.x as f32, path.end.y as f32),
+                    (handle_start.x as f32, handle_start.y as f32),
+                    (handle_end.x as f32, handle_end.y as f32),
+                    RED_COLOR,
+                );
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -695,38 +848,81 @@ pub struct RawJigsawTile {
     pub index: usize,
     pub debug: bool,
     pub starting_point: (f32, f32),
-    pub top_edge: Edge,
-    pub right_edge: Edge,
-    pub bottom_edge: Edge,
-    pub left_edge: Edge,
+    // pub top_edge: Edge,
+    // pub right_edge: Edge,
+    // pub bottom_edge: Edge,
+    // pub left_edge: Edge,
+    pub beziers: Vec<Bezier>,
 }
 
 impl RawJigsawTile {
-    pub fn draw(&self, image: &mut DynamicImage) {
-        println!("Drawing tile {}", self.index);
-        print!("top_edge ");
-        self.top_edge.draw(image, Side::Top);
-        print!("right_edge ");
-        self.right_edge.draw(image, Side::Right);
-        print!("bottom_edge ");
-        self.bottom_edge.draw(image, Side::Bottom);
-        print!("left_edge ");
-        self.left_edge.draw(image, Side::Left);
+    pub fn new(
+        index: usize,
+        starting_point: (f32, f32),
+        top_edge: Edge,
+        right_edge: Edge,
+        bottom_edge: Edge,
+        left_edge: Edge,
+    ) -> Self {
+        println!("Creating tile {}", index);
+        let top_beziers = top_edge.to_beziers(false);
+        println!("Top beziers: {:?}", top_beziers);
+        let right_beziers = right_edge.to_beziers(false);
+        println!("Right beziers: {:?}", right_beziers);
+        let bottom_beziers = bottom_edge.to_beziers(true);
+        println!("Bottom beziers: {:?}", bottom_beziers);
+        let left_beziers = left_edge.to_beziers(true);
+        println!("Left beziers: {:?}", left_beziers);
+
+        let beziers: Vec<_> = vec![top_beziers, right_beziers, bottom_beziers, left_beziers]
+            .into_iter()
+            .flatten()
+            .collect();
+
+        println!("Beziers: {:?}", beziers.len());
+        RawJigsawTile {
+            index,
+            debug: false,
+            starting_point,
+            // top_edge,
+            // right_edge,
+            // bottom_edge,
+            // left_edge,
+            beziers,
+        }
     }
 
-    pub fn crop(&self, i: usize, image: &mut DynamicImage) {
-        let x = (self.starting_point.0 - self.left_edge.offset(Side::Left)) as u32;
-        let y = (self.starting_point.1 - self.top_edge.offset(Side::Top)) as u32;
-        let width = ((self.right_edge.start_point().0 + self.right_edge.offset(Side::Right))
-            - (self.left_edge.start_point().0 - self.left_edge.offset(Side::Left)))
-            as u32;
-        let height = ((self.bottom_edge.start_point().1 + self.bottom_edge.offset(Side::Bottom))
-            - (self.top_edge.start_point().1 - self.top_edge.offset(Side::Top)))
-            as u32;
-        println!("Cropping tile {} at {}, {}, {}, {}", i, x, y, width, height);
-        let tile = image.view(x, y, width, height).to_image();
-        tile.save(format!("tiles/puzzle_piece_{}.png", i))
-            .expect("Failed to save piece");
+    // pub fn draw(&self, image: &mut DynamicImage) {
+    //     println!("Drawing tile {}", self.index);
+    //
+    //     for bezier in &self.beziers {
+    //
+    //     }
+    //
+    // }
+    //
+    // pub fn crop(&self, i: usize, image: &mut DynamicImage) {
+    //     let x = (self.starting_point.0 - self.left_edge.offset(Side::Left)) as u32;
+    //     let y = (self.starting_point.1 - self.top_edge.offset(Side::Top)) as u32;
+    //     let width = ((self.right_edge.start_point().0 + self.right_edge.offset(Side::Right))
+    //         - (self.left_edge.start_point().0 - self.left_edge.offset(Side::Left)))
+    //         as u32;
+    //     let height = ((self.bottom_edge.start_point().1 + self.bottom_edge.offset(Side::Bottom))
+    //         - (self.top_edge.start_point().1 - self.top_edge.offset(Side::Top)))
+    //         as u32;
+    //     println!("Cropping tile {} at {}, {}, {}, {}", i, x, y, width, height);
+    //     let tile = image.view(x, y, width, height).to_image();
+    //     tile.save(format!("tiles/puzzle_piece_{}.png", i))
+    //         .expect("Failed to save piece");
+    // }
+}
+
+#[derive(Clone, PartialEq, Hash, Eq, Debug)]
+pub struct PuzzleId(u64);
+
+impl Identifier for PuzzleId {
+    fn new() -> Self {
+        PuzzleId(0)
     }
 }
 
