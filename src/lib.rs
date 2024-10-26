@@ -628,7 +628,7 @@ pub fn build_jigsaw_tiles(
 
             let sub_path: Subpath<PuzzleId> = Subpath::from_beziers(&raw_tile.beziers, true);
             // draw debug line
-            draw_debug_line(&mut image, &sub_path);
+            // draw_debug_line(&mut image, &sub_path);
             let [box_min, box_max] = sub_path.bounding_box().expect("Failed to get bounding box");
             let top_left_x = (box_min.x - piece_width_offset).max(0.0);
             let top_left_y = (box_min.y - piece_height_offset).max(0.0);
@@ -657,22 +657,19 @@ pub fn build_jigsaw_tiles(
                     height as u32,
                 )
                 .to_image();
-            
 
-            for y in 0..height as u32 {
-                for x in 0..width as u32 {
-                    let pixel = tile.get_pixel_mut(x, y);
+
+
+            tile.par_enumerate_pixels_mut().for_each(|(x, y, pixel)| {
                     if !sub_path.contains_point(DVec2::new(x as f64, y as f64)) {
                         *pixel = Rgba([0, 0, 0, 0])
                     }
-                }
-            }
+            });
 
             debug!("saving image {}", i);
             tile.save(format!("tiles/puzzle_piece_{}.png", i))
                 .expect("Failed to save piece");
             debug!("saving image {} over", i);
-            panic!("");
 
             i += 1;
         }
@@ -727,15 +724,15 @@ impl JigsawTile {
         bottom_edge: Edge,
         left_edge: Edge,
     ) -> Self {
-        println!("Creating tile {}", index);
+
         let top_beziers = top_edge.to_beziers(false);
-        println!("Top beziers: {:?}", top_beziers);
+
         let right_beziers = right_edge.to_beziers(false);
-        println!("Right beziers: {:?}", right_beziers);
+
         let bottom_beziers = bottom_edge.to_beziers(true);
-        println!("Bottom beziers: {:?}", bottom_beziers);
+
         let left_beziers = left_edge.to_beziers(true);
-        println!("Left beziers: {:?}", left_beziers);
+
 
         let beziers: Vec<_> = vec![top_beziers, right_beziers, bottom_beziers, left_beziers]
             .into_iter()
