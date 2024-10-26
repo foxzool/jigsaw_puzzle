@@ -1,16 +1,18 @@
 //! The Jigsaw Puzzle library creates SVG paths which can be used to cut out puzzle pieces from a
 //! given rectangular image. It provides three public functions:
 //!
-//! - [`build_jigsaw_template`] returns the paths from a given number of pieces in a column and a
+//! - [`build_jigsaw_tiles`] returns the paths from a given number of pieces in a column and a
 //! row. This is the function you normally want to use
 //! - [`generate_columns_rows_numbers`] returns an ideal distribution of pieces on the x- and y-axes
 //! for a given total number of pieces
 //! - [`round`] is a util function which approximately rounds a f32 value to two decimal places
 
-use glam::DVec2;
 use bezier_rs::{Bezier, BezierHandles, Identifier, Subpath};
+use glam::DVec2;
 use image::{DynamicImage, GenericImageView, Pixel, Rgba};
 use imageproc::drawing::{draw_cubic_bezier_curve_mut, draw_line_segment_mut};
+use log::{debug, info};
+use rayon::iter::ParallelIterator;
 use std::f32;
 use std::vec;
 
@@ -58,16 +60,6 @@ impl IndentationSegment {
             )
         }
     }
-    pub fn draw(&self, image: &mut DynamicImage) {
-        draw_cubic_bezier_curve_mut(
-            image,
-            self.starting_point,
-            self.end_point,
-            self.control_point_1,
-            self.control_point_2,
-            image::Rgba([0, 0, 255, 255]),
-        );
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -85,9 +77,12 @@ pub struct IndentedEdge {
 }
 
 #[allow(dead_code)]
-const RED_COLOR: image::Rgba<u8> = image::Rgba([255, 0, 0, 255]);
+const RED_COLOR: Rgba<u8> = Rgba([255, 0, 0, 255]);
+
 #[allow(dead_code)]
-const YELLOW_COLOR: image::Rgba<u8> = image::Rgba([255, 255, 0, 255]);
+const BLACK_COLOR: Rgba<u8> = Rgba([255, 255, 255, 255]);
+#[allow(dead_code)]
+const YELLOW_COLOR: Rgba<u8> = Rgba([255, 255, 0, 255]);
 
 impl IndentedEdge {
     /// Creates a new indented edge
@@ -112,96 +107,6 @@ impl IndentedEdge {
                 self.middle_segment.to_bezier(reverse),
                 self.last_segment.to_bezier(reverse),
             ]
-        }
-    }
-
-    fn calc_offset(&self, side: Side) -> f32 {
-        if self.is_tab(side) {
-            self.generator.tab_size * 200.0 * 2.0
-        } else {
-            10.0
-        }
-    }
-
-    pub fn draw(&self, image: &mut DynamicImage, side: Side) {
-
-        // match side {
-        //     Side::Top => {
-        //         draw_line_segment_mut(
-        //             image,
-        //             (
-        //                 self.first_segment.starting_point.0,
-        //                 self.first_segment.starting_point.1 - off_size,
-        //             ),
-        //             (
-        //                 self.last_segment.end_point.0,
-        //                 self.last_segment.end_point.1 - off_size,
-        //             ),
-        //             RED_COLOR,
-        //         );
-        //     }
-        //     Side::Right => {
-        //         draw_line_segment_mut(
-        //             image,
-        //             (
-        //                 self.first_segment.starting_point.0 + off_size,
-        //                 self.first_segment.starting_point.1,
-        //             ),
-        //             (
-        //                 self.last_segment.end_point.0 + off_size,
-        //                 self.last_segment.end_point.1,
-        //             ),
-        //             RED_COLOR,
-        //         );
-        //     }
-        //     Side::Bottom => {
-        //         // draw_line_segment_mut(
-        //         //     image,
-        //         //     (
-        //         //         self.first_segment.starting_point.0,
-        //         //         self.first_segment.starting_point.1 + off_size,
-        //         //     ),
-        //         //     (
-        //         //         self.last_segment.end_point.0,
-        //         //         self.last_segment.end_point.1 + off_size,
-        //         //     ),
-        //         //     RED_COLOR,
-        //         // );
-        //     }
-        //     Side::Left => {
-        //         // draw_line_segment_mut(
-        //         //     image,
-        //         //     (
-        //         //         self.first_segment.starting_point.0 - off_size,
-        //         //         self.first_segment.starting_point.1,
-        //         //     ),
-        //         //     (
-        //         //         self.last_segment.end_point.0 - off_size,
-        //         //         self.last_segment.end_point.1,
-        //         //     ),
-        //         //     RED_COLOR,
-        //         // );
-        //     }
-        // }
-
-        self.first_segment.draw(image);
-        self.middle_segment.draw(image);
-        self.last_segment.draw(image);
-
-        draw_line_segment_mut(
-            image,
-            self.first_segment.starting_point,
-            self.last_segment.end_point,
-            image::Rgba([255, 0, 0, 255]),
-        );
-    }
-
-    pub fn is_tab(&self, side: Side) -> bool {
-        match side {
-            Side::Top => self.first_segment.starting_point.1 > self.first_segment.end_point.1,
-            Side::Right => self.first_segment.starting_point.0 < self.first_segment.end_point.0,
-            Side::Bottom => self.first_segment.starting_point.1 < self.first_segment.end_point.1,
-            Side::Left => self.first_segment.starting_point.0 > self.first_segment.end_point.0,
         }
     }
 }
@@ -506,34 +411,6 @@ impl Edge {
             Edge::StraightEdge(oe) => oe.to_beziers(reverse),
         }
     }
-
-    pub fn draw(&self, image: &mut DynamicImage, side: Side) {
-        match self {
-            Edge::IndentedEdge(ie) => ie.draw(image, side),
-            Edge::StraightEdge(oe) => oe.draw(image),
-        }
-    }
-
-    pub fn start_point(&self) -> (f32, f32) {
-        match self {
-            Edge::IndentedEdge(ie) => ie.first_segment.starting_point,
-            Edge::StraightEdge(oe) => oe.starting_point,
-        }
-    }
-
-    pub fn end_point(&self) -> (f32, f32) {
-        match self {
-            Edge::IndentedEdge(ie) => ie.last_segment.end_point,
-            Edge::StraightEdge(oe) => oe.end_point,
-        }
-    }
-
-    pub fn offset(&self, side: Side) -> f32 {
-        match self {
-            Edge::IndentedEdge(ie) => ie.calc_offset(side),
-            Edge::StraightEdge(_) => 0.0,
-        }
-    }
 }
 
 /// Divides the axis into `pieces` of equal length. Returns the starting point of each piece,
@@ -648,15 +525,16 @@ pub fn generate_columns_rows_numbers(
 ///
 /// `seed` provides the initial "randomness" when creating the contours of the puzzle pieces. Same
 /// seed values for images with same dimensions and same number of pieces lead to same SVG paths.
-pub fn build_jigsaw_template(
+pub fn build_jigsaw_tiles(
     image: DynamicImage,
     pieces_in_column: usize,
     pieces_in_row: usize,
     tab_size: Option<f32>,
     jitter: Option<f32>,
     seed: Option<usize>,
-) -> DynamicImage {
+) -> Vec<JigsawTile> {
     let (image_width, image_height) = image.dimensions();
+    debug!("start processing image with {}x{}", image_width, image_height);
     let image_width = image_width as f32;
     let image_height = image_height as f32;
     let (starting_points_x, piece_width) = divide_axis(image_width, pieces_in_column);
@@ -666,7 +544,7 @@ pub fn build_jigsaw_template(
     let mut vertical_edges = vec![];
     let mut horizontal_edges = vec![];
     let mut top_border = true;
-    'out:  for index_y in 0..starting_points_y.len() {
+    for index_y in 0..starting_points_y.len() {
         let mut left_border = true;
         for index_x in 0..starting_points_x.len() {
             horizontal_edges.push(if top_border {
@@ -726,17 +604,19 @@ pub fn build_jigsaw_template(
         }))
     }
 
+    info!("process edge end");
+
     let piece_width_offset = (piece_width * 0.05) as f64;
     let piece_height_offset = (piece_height * 0.05) as f64;
-    let mut bezier_list = vec![];
+
     let mut i = 0;
 
-   for y in starting_points_y.iter() {
+    for y in starting_points_y.iter() {
         for x in starting_points_x.iter() {
             let (top_index, right_index, bottom_index, left_index) =
                 get_border_indices(i, pieces_in_column);
             let mut image = image.clone();
-            let raw_tile = RawJigsawTile::new(
+            let raw_tile = JigsawTile::new(
                 i,
                 (*x, *y),
                 horizontal_edges[top_index].clone(),
@@ -744,7 +624,7 @@ pub fn build_jigsaw_template(
                 horizontal_edges[bottom_index].clone(),
                 vertical_edges[left_index].clone(),
             );
-            bezier_list.push(raw_tile.beziers.clone());
+            debug!("new raw tile");
 
             let sub_path: Subpath<PuzzleId> = Subpath::from_beziers(&raw_tile.beziers, true);
             // draw debug line
@@ -777,21 +657,21 @@ pub fn build_jigsaw_template(
                     height as u32,
                 )
                 .to_image();
+            
 
             for y in 0..height as u32 {
                 for x in 0..width as u32 {
-
                     let pixel = tile.get_pixel_mut(x, y);
                     if !sub_path.contains_point(DVec2::new(x as f64, y as f64)) {
-
                         *pixel = Rgba([0, 0, 0, 0])
                     }
                 }
             }
 
-            println!("saving image {}", i);
+            debug!("saving image {}", i);
             tile.save(format!("tiles/puzzle_piece_{}.png", i))
                 .expect("Failed to save piece");
+            debug!("saving image {} over", i);
             panic!("");
 
             i += 1;
@@ -799,8 +679,7 @@ pub fn build_jigsaw_template(
     }
 
 
-
-    image
+    vec![]
 }
 
 fn draw_debug_line(image: &mut DynamicImage, sub_path: &Subpath<PuzzleId>) {
@@ -811,7 +690,7 @@ fn draw_debug_line(image: &mut DynamicImage, sub_path: &Subpath<PuzzleId>) {
                     image,
                     (path.start.x as f32, path.start.y as f32),
                     (path.end.x as f32, path.end.y as f32),
-                    RED_COLOR,
+                    BLACK_COLOR,
                 );
             }
             BezierHandles::Quadratic { .. } => {}
@@ -825,7 +704,7 @@ fn draw_debug_line(image: &mut DynamicImage, sub_path: &Subpath<PuzzleId>) {
                     (path.end.x as f32, path.end.y as f32),
                     (handle_start.x as f32, handle_start.y as f32),
                     (handle_end.x as f32, handle_end.y as f32),
-                    RED_COLOR,
+                    BLACK_COLOR,
                 );
             }
         }
@@ -833,18 +712,13 @@ fn draw_debug_line(image: &mut DynamicImage, sub_path: &Subpath<PuzzleId>) {
 }
 
 #[derive(Debug)]
-pub struct RawJigsawTile {
+pub struct JigsawTile {
     pub index: usize,
-    pub debug: bool,
     pub starting_point: (f32, f32),
-    // pub top_edge: Edge,
-    // pub right_edge: Edge,
-    // pub bottom_edge: Edge,
-    // pub left_edge: Edge,
     pub beziers: Vec<Bezier>,
 }
 
-impl RawJigsawTile {
+impl JigsawTile {
     pub fn new(
         index: usize,
         starting_point: (f32, f32),
@@ -869,9 +743,8 @@ impl RawJigsawTile {
             .collect();
 
         println!("Beziers: {:?}", beziers.len());
-        RawJigsawTile {
+        JigsawTile {
             index,
-            debug: false,
             starting_point,
             // top_edge,
             // right_edge,
@@ -880,30 +753,6 @@ impl RawJigsawTile {
             beziers,
         }
     }
-
-    // pub fn draw(&self, image: &mut DynamicImage) {
-    //     println!("Drawing tile {}", self.index);
-    //
-    //     for bezier in &self.beziers {
-    //
-    //     }
-    //
-    // }
-    //
-    // pub fn crop(&self, i: usize, image: &mut DynamicImage) {
-    //     let x = (self.starting_point.0 - self.left_edge.offset(Side::Left)) as u32;
-    //     let y = (self.starting_point.1 - self.top_edge.offset(Side::Top)) as u32;
-    //     let width = ((self.right_edge.start_point().0 + self.right_edge.offset(Side::Right))
-    //         - (self.left_edge.start_point().0 - self.left_edge.offset(Side::Left)))
-    //         as u32;
-    //     let height = ((self.bottom_edge.start_point().1 + self.bottom_edge.offset(Side::Bottom))
-    //         - (self.top_edge.start_point().1 - self.top_edge.offset(Side::Top)))
-    //         as u32;
-    //     println!("Cropping tile {} at {}, {}, {}, {}", i, x, y, width, height);
-    //     let tile = image.view(x, y, width, height).to_image();
-    //     tile.save(format!("tiles/puzzle_piece_{}.png", i))
-    //         .expect("Failed to save piece");
-    // }
 }
 
 #[derive(Clone, PartialEq, Hash, Eq, Debug)]
@@ -937,7 +786,7 @@ mod tests {
     #[test]
     fn test_divisor_pairs() {
         let given_number = 1;
-        assert_eq!(find_divisors(given_number), vec![(1, 1),]);
+        assert_eq!(find_divisors(given_number), vec![(1, 1), ]);
 
         let given_number = 24;
         assert_eq!(
@@ -955,7 +804,7 @@ mod tests {
         );
 
         let given_number = 9;
-        assert_eq!(find_divisors(given_number), vec![(1, 9), (3, 3), (9, 1),])
+        assert_eq!(find_divisors(given_number), vec![(1, 9), (3, 3), (9, 1), ])
     }
 
     #[test]
