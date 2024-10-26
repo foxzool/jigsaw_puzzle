@@ -7,8 +7,9 @@
 //! for a given total number of pieces
 //! - [`round`] is a util function which approximately rounds a f32 value to two decimal places
 
+use glam::DVec2;
 use bezier_rs::{Bezier, BezierHandles, Identifier, Subpath};
-use image::{DynamicImage, GenericImageView};
+use image::{DynamicImage, GenericImageView, Pixel, Rgba};
 use imageproc::drawing::{draw_cubic_bezier_curve_mut, draw_line_segment_mut};
 use std::f32;
 use std::vec;
@@ -83,8 +84,10 @@ pub struct IndentedEdge {
     pub generator: EdgeContourGenerator,
 }
 
+#[allow(dead_code)]
 const RED_COLOR: image::Rgba<u8> = image::Rgba([255, 0, 0, 255]);
-const YElLOW_COLOR: image::Rgba<u8> = image::Rgba([255, 255, 0, 255]);
+#[allow(dead_code)]
+const YELLOW_COLOR: image::Rgba<u8> = image::Rgba([255, 255, 0, 255]);
 
 impl IndentedEdge {
     /// Creates a new indented edge
@@ -121,7 +124,7 @@ impl IndentedEdge {
     }
 
     pub fn draw(&self, image: &mut DynamicImage, side: Side) {
-        let off_size = self.calc_offset(side);
+
         // match side {
         //     Side::Top => {
         //         draw_line_segment_mut(
@@ -663,7 +666,7 @@ pub fn build_jigsaw_template(
     let mut vertical_edges = vec![];
     let mut horizontal_edges = vec![];
     let mut top_border = true;
-    for index_y in 0..starting_points_y.len() {
+    'out:  for index_y in 0..starting_points_y.len() {
         let mut left_border = true;
         for index_x in 0..starting_points_x.len() {
             horizontal_edges.push(if top_border {
@@ -728,7 +731,7 @@ pub fn build_jigsaw_template(
     let mut bezier_list = vec![];
     let mut i = 0;
 
-    for y in starting_points_y.iter() {
+   for y in starting_points_y.iter() {
         for x in starting_points_x.iter() {
             let (top_index, right_index, bottom_index, left_index) =
                 get_border_indices(i, pieces_in_column);
@@ -766,7 +769,7 @@ pub fn build_jigsaw_template(
             //     Rect::at(top_left_x as i32, top_left_y as i32).of_size(width as u32, height as u32),
             //     YElLOW_COLOR,
             // );
-            let tile = image
+            let mut tile = image
                 .view(
                     top_left_x as u32,
                     top_left_y as u32,
@@ -774,42 +777,28 @@ pub fn build_jigsaw_template(
                     height as u32,
                 )
                 .to_image();
+
+            for y in 0..height as u32 {
+                for x in 0..width as u32 {
+
+                    let pixel = tile.get_pixel_mut(x, y);
+                    if !sub_path.contains_point(DVec2::new(x as f64, y as f64)) {
+
+                        *pixel = Rgba([0, 0, 0, 0])
+                    }
+                }
+            }
+
+            println!("saving image {}", i);
             tile.save(format!("tiles/puzzle_piece_{}.png", i))
                 .expect("Failed to save piece");
+            panic!("");
 
             i += 1;
         }
     }
 
-    // let beziers: Vec<Bezier> = bezier_list.into_iter().flatten().collect();
-    // let sub_path: Subpath<PuzzleId> = Subpath::from_beziers(&beziers, true);
-    //
-    // for path in sub_path.iter() {
-    //     match path.handles {
-    //         BezierHandles::Linear => {
-    //             draw_line_segment_mut(
-    //                 &mut image,
-    //                 (path.start.x as f32, path.start.y as f32),
-    //                 (path.end.x as f32, path.end.y as f32),
-    //                 RED_COLOR,
-    //             );
-    //         }
-    //         BezierHandles::Quadratic { .. } => {}
-    //         BezierHandles::Cubic {
-    //             handle_start,
-    //             handle_end,
-    //         } => {
-    //             draw_cubic_bezier_curve_mut(
-    //                 &mut image,
-    //                 (path.start.x as f32, path.start.y as f32),
-    //                 (path.end.x as f32, path.end.y as f32),
-    //                 (handle_start.x as f32, handle_start.y as f32),
-    //                 (handle_end.x as f32, handle_end.y as f32),
-    //                 RED_COLOR,
-    //             );
-    //         }
-    //     }
-    // }
+
 
     image
 }

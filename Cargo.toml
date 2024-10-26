@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 bezier-rs = "0.4.0"
+glam = "0.24.2"
 
 image = "0.25.4"
 imageproc = "0.25.0"
