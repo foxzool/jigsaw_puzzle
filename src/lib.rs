@@ -9,15 +9,15 @@
 
 use bezier_rs::{Bezier, BezierHandles, Identifier, Subpath};
 use glam::DVec2;
-use image::{DynamicImage, GenericImageView, Pixel, Rgba};
-use imageproc::drawing::{draw_cubic_bezier_curve_mut, draw_line_segment_mut};
+use image::{DynamicImage, GenericImageView, Rgba};
+
 use log::{debug, info};
 use rayon::iter::ParallelIterator;
 use std::f32;
 use std::vec;
 
 const DEFAULT_TAB_SIZE: f32 = 20.0;
-const DEFAULT_JITTER: f32 = 0.0;
+const DEFAULT_JITTER: f32 = 1.0;
 
 /// A segment of an indented puzzle piece edge. A segment is described by a cubic Bézier curve,
 /// which includes a starting point, an end point and two control points. Three segments make up a
@@ -391,9 +391,6 @@ impl StraightEdge {
             )]
         }
     }
-    pub fn draw(&self, image: &mut DynamicImage) {
-        draw_line_segment_mut(image, self.starting_point, self.end_point, RED_COLOR);
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -514,9 +511,12 @@ pub fn generate_columns_rows_numbers(
     optimal_aspect_ratio(divisor_pairs, image_width, image_height)
 }
 
+const MAX_WIDTH: u32 = 1920;
+const MAX_HEIGHT: u32 = 1080;
+
 /// Returns information on how to cut jigsaw puzzle pieces from an image of a given width and
 /// height and the number of pieces in a row and a column as an optional the tab size, a "jitter"
-/// factor and a initial seed value.
+/// factor and an initial seed value.
 ///
 /// The `tab_size` argument defines the size of the pieces' tabs. It can be any number from `10.0` to `30.0` and defaults to `20.0`
 ///
@@ -526,15 +526,19 @@ pub fn generate_columns_rows_numbers(
 /// `seed` provides the initial "randomness" when creating the contours of the puzzle pieces. Same
 /// seed values for images with same dimensions and same number of pieces lead to same SVG paths.
 pub fn build_jigsaw_tiles(
-    image: DynamicImage,
+    mut image: DynamicImage,
     pieces_in_column: usize,
     pieces_in_row: usize,
     tab_size: Option<f32>,
     jitter: Option<f32>,
     seed: Option<usize>,
 ) -> Vec<JigsawTile> {
+    scale_image(&mut image);
     let (image_width, image_height) = image.dimensions();
-    debug!("start processing image with {}x{}", image_width, image_height);
+    debug!(
+        "start processing image with {}x{}",
+        image_width, image_height
+    );
     let image_width = image_width as f32;
     let image_height = image_height as f32;
     let (starting_points_x, piece_width) = divide_axis(image_width, pieces_in_column);
@@ -606,84 +610,103 @@ pub fn build_jigsaw_tiles(
 
     info!("process edge end");
 
-    let piece_width_offset = (piece_width * 0.05) as f64;
-    let piece_height_offset = (piece_height * 0.05) as f64;
+    let piece_width_offset = (piece_width * 0.01) as f64;
+    let piece_height_offset = (piece_height * 0.01) as f64;
 
-    let mut i = 0;
+    for i in 0..(pieces_in_column * pieces_in_row) {
+        let (top_index, right_index, bottom_index, left_index) =
+            get_border_indices(i, pieces_in_column);
+        let mut image = image.clone();
+        let raw_tile = JigsawTile::new(
+            i,
+            horizontal_edges[top_index].clone(),
+            vertical_edges[right_index].clone(),
+            horizontal_edges[bottom_index].clone(),
+            vertical_edges[left_index].clone(),
+        );
+        debug!("new raw tile");
 
-    for y in starting_points_y.iter() {
-        for x in starting_points_x.iter() {
-            let (top_index, right_index, bottom_index, left_index) =
-                get_border_indices(i, pieces_in_column);
-            let mut image = image.clone();
-            let raw_tile = JigsawTile::new(
-                i,
-                (*x, *y),
-                horizontal_edges[top_index].clone(),
-                vertical_edges[right_index].clone(),
-                horizontal_edges[bottom_index].clone(),
-                vertical_edges[left_index].clone(),
-            );
-            debug!("new raw tile");
+        let sub_path: Subpath<PuzzleId> = Subpath::from_beziers(&raw_tile.beziers, true);
+        // draw debug line
+        // draw_debug_line(&mut image, &sub_path);
+        let [box_min, box_max] = sub_path.bounding_box().expect("Failed to get bounding box");
+        let top_left_x = (box_min.x - piece_width_offset).max(0.0);
+        let top_left_y = (box_min.y - piece_height_offset).max(0.0);
+        let mut width = (box_max.x - box_min.x + 2.0 * piece_width_offset).max(piece_width as f64);
+        let mut height =
+            (box_max.y - box_min.y + 2.0 * piece_height_offset).max(piece_height as f64);
+        if top_left_x + width > image_width as f64 {
+            width = image_width as f64 - top_left_x + 1.0;
+        }
+        if top_left_y + height > image_height as f64 {
+            height = (image_height as f64 - top_left_y) + 1.0;
+        }
 
-            let sub_path: Subpath<PuzzleId> = Subpath::from_beziers(&raw_tile.beziers, true);
-            // draw debug line
-            // draw_debug_line(&mut image, &sub_path);
-            let [box_min, box_max] = sub_path.bounding_box().expect("Failed to get bounding box");
-            let top_left_x = (box_min.x - piece_width_offset).max(0.0);
-            let top_left_y = (box_min.y - piece_height_offset).max(0.0);
-            let mut width =
-                (box_max.x - box_min.x + 2.0 * piece_width_offset).max(piece_width as f64);
-            let mut height =
-                (box_max.y - box_min.y + 2.0 * piece_height_offset).max(piece_height as f64);
-            if top_left_x + width > image_width as f64 {
-                width = image_width as f64 - top_left_x + 1.0;
-            }
-            if top_left_y + height > image_height as f64 {
-                height = (image_height as f64 - top_left_y) + 1.0;
-            }
+        // draw debug bbox
+        // draw_hollow_rect_mut(
+        //     &mut image,
+        //     Rect::at(top_left_x as i32, top_left_y as i32).of_size(width as u32, height as u32),
+        //     YELLOW_COLOR,
+        // );
 
-            // draw debug bbox
-            // draw_hollow_rect_mut(
-            //     &mut image,
-            //     Rect::at(top_left_x as i32, top_left_y as i32).of_size(width as u32, height as u32),
-            //     YElLOW_COLOR,
-            // );
-            let mut tile = image
-                .view(
-                    top_left_x as u32,
-                    top_left_y as u32,
-                    width as u32,
-                    height as u32,
-                )
-                .to_image();
+        let mut tile_image = image
+            .view(
+                top_left_x as u32,
+                top_left_y as u32,
+                width as u32,
+                height as u32,
+            )
+            .to_image();
 
-
-
-            tile.par_enumerate_pixels_mut().for_each(|(x, y, pixel)| {
-                    if !sub_path.contains_point(DVec2::new(x as f64, y as f64)) {
-                        *pixel = Rgba([0, 0, 0, 0])
-                    }
+        tile_image
+            .par_enumerate_pixels_mut()
+            .for_each(|(x, y, pixel)| {
+                let point = DVec2::new(top_left_x + x as f64, top_left_y + y as f64);
+                if !sub_path.contains_point(point) {
+                    // println!("{},{}", point.x, point.y);
+                    *pixel = Rgba([0, 0, 0, 0])
+                }
             });
 
-            debug!("saving image {}", i);
-            tile.save(format!("tiles/puzzle_piece_{}.png", i))
-                .expect("Failed to save piece");
-            debug!("saving image {} over", i);
-
-            i += 1;
-        }
+        debug!(
+            "saving image {} ({} {}) {} {}",
+            i, top_left_x, top_left_y, width, height
+        );
+        tile_image
+            .save(format!("tiles/puzzle_piece_{}.png", i))
+            .expect("Failed to save piece");
+        debug!("saving image {} over", i);
     }
-
 
     vec![]
 }
 
+/// Scales an image to a maximum width and height
+#[allow(dead_code)]
+fn scale_image(image: &mut DynamicImage) {
+    let (width, height) = image.dimensions();
+    let scale = if width > MAX_WIDTH || height > MAX_HEIGHT {
+        let scale_x = MAX_WIDTH as f32 / width as f32;
+        let scale_y = MAX_HEIGHT as f32 / height as f32;
+        scale_x.min(scale_y)
+    } else {
+        1.0
+    };
+    if scale < 1.0 {
+        *image = image.resize(
+            (width as f32 * scale) as u32,
+            (height as f32 * scale) as u32,
+            image::imageops::FilterType::Lanczos3,
+        );
+    }
+}
+
+#[allow(dead_code)]
 fn draw_debug_line(image: &mut DynamicImage, sub_path: &Subpath<PuzzleId>) {
     for path in sub_path.iter() {
         match path.handles {
             BezierHandles::Linear => {
-                draw_line_segment_mut(
+                imageproc::drawing::draw_line_segment_mut(
                     image,
                     (path.start.x as f32, path.start.y as f32),
                     (path.end.x as f32, path.end.y as f32),
@@ -695,13 +718,13 @@ fn draw_debug_line(image: &mut DynamicImage, sub_path: &Subpath<PuzzleId>) {
                 handle_start,
                 handle_end,
             } => {
-                draw_cubic_bezier_curve_mut(
+                imageproc::drawing::draw_cubic_bezier_curve_mut(
                     image,
                     (path.start.x as f32, path.start.y as f32),
                     (path.end.x as f32, path.end.y as f32),
                     (handle_start.x as f32, handle_start.y as f32),
                     (handle_end.x as f32, handle_end.y as f32),
-                    BLACK_COLOR,
+                    RED_COLOR,
                 );
             }
         }
@@ -711,44 +734,27 @@ fn draw_debug_line(image: &mut DynamicImage, sub_path: &Subpath<PuzzleId>) {
 #[derive(Debug)]
 pub struct JigsawTile {
     pub index: usize,
-    pub starting_point: (f32, f32),
     pub beziers: Vec<Bezier>,
 }
 
 impl JigsawTile {
     pub fn new(
         index: usize,
-        starting_point: (f32, f32),
         top_edge: Edge,
         right_edge: Edge,
         bottom_edge: Edge,
         left_edge: Edge,
     ) -> Self {
-
         let top_beziers = top_edge.to_beziers(false);
-
         let right_beziers = right_edge.to_beziers(false);
-
         let bottom_beziers = bottom_edge.to_beziers(true);
-
         let left_beziers = left_edge.to_beziers(true);
-
-
         let beziers: Vec<_> = vec![top_beziers, right_beziers, bottom_beziers, left_beziers]
             .into_iter()
             .flatten()
             .collect();
 
-        println!("Beziers: {:?}", beziers.len());
-        JigsawTile {
-            index,
-            starting_point,
-            // top_edge,
-            // right_edge,
-            // bottom_edge,
-            // left_edge,
-            beziers,
-        }
+        JigsawTile { index, beziers }
     }
 }
 
@@ -783,7 +789,7 @@ mod tests {
     #[test]
     fn test_divisor_pairs() {
         let given_number = 1;
-        assert_eq!(find_divisors(given_number), vec![(1, 1), ]);
+        assert_eq!(find_divisors(given_number), vec![(1, 1),]);
 
         let given_number = 24;
         assert_eq!(
@@ -801,7 +807,7 @@ mod tests {
         );
 
         let given_number = 9;
-        assert_eq!(find_divisors(given_number), vec![(1, 9), (3, 3), (9, 1), ])
+        assert_eq!(find_divisors(given_number), vec![(1, 9), (3, 3), (9, 1),])
     }
 
     #[test]
