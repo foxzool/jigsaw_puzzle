@@ -11,7 +11,6 @@ use bezier_rs::{Bezier, BezierHandles, Identifier, Subpath};
 use glam::DVec2;
 use image::{DynamicImage, GenericImageView, Rgba, RgbaImage};
 
-use imageproc::definitions::Image;
 use log::{debug, info};
 use rayon::iter::ParallelIterator;
 use std::f32;
@@ -73,8 +72,6 @@ pub struct IndentedEdge {
     pub middle_segment: IndentationSegment,
     /// Describes the right half for a horizontal edge, the lower half for a vertical edge
     pub last_segment: IndentationSegment,
-
-    pub generator: EdgeContourGenerator,
 }
 
 #[allow(dead_code)]
@@ -352,7 +349,6 @@ impl EdgeContourGenerator {
             first_segment,
             middle_segment,
             last_segment,
-            generator: self.clone(),
         };
         (
             self.seed,
@@ -572,8 +568,8 @@ impl JigsawGenerator {
     }
 
     pub fn generate(self) -> JigsawTemplate {
-        let new_image = scale_image(&self.origin_image);
-        let (image_width, image_height) = new_image.dimensions();
+        let scaled_image = scale_image(&self.origin_image);
+        let (image_width, image_height) = scaled_image.dimensions();
         debug!(
             "start processing image with {}x{}",
             image_width, image_height
@@ -671,10 +667,14 @@ impl JigsawGenerator {
                 vertical_edges[left_index].clone(),
             );
 
-            let sub_path: Subpath<PuzzleId> = Subpath::from_beziers(&piece.beziers, true);
+            debug!("calc beziers end {}", i);
+
             // draw debug line
             // draw_debug_line(&mut image, &sub_path);
-            let [box_min, box_max] = sub_path.bounding_box().expect("Failed to get bounding box");
+            let [box_min, box_max] = piece
+                .sub_path
+                .bounding_box()
+                .expect("Failed to get bounding box");
             let top_left_x = (box_min.x - piece_width_offset).max(0.0);
             let top_left_y = (box_min.y - piece_height_offset).max(0.0);
             let mut width =
@@ -695,7 +695,7 @@ impl JigsawGenerator {
             //     YELLOW_COLOR,
             // );
 
-            let mut piece_image = new_image
+            let mut piece_image = scaled_image
                 .view(
                     top_left_x as u32,
                     top_left_y as u32,
@@ -708,13 +708,13 @@ impl JigsawGenerator {
                 .par_enumerate_pixels_mut()
                 .for_each(|(x, y, pixel)| {
                     let point = DVec2::new(top_left_x + x as f64, top_left_y + y as f64);
-                    if !sub_path.contains_point(point) {
+                    if !piece.sub_path.contains_point(point) {
                         // println!("{},{}", point.x, point.y);
                         *pixel = Rgba([0, 0, 0, 0])
                     }
                 });
 
-            draw_outline(&mut piece_image, top_left_x, top_left_y, &sub_path);
+            draw_outline(&mut piece_image, top_left_x, top_left_y, &piece.sub_path);
 
             debug!(
                 "processing image {} ({} {}) {} {} end",
@@ -728,7 +728,7 @@ impl JigsawGenerator {
 
         JigsawTemplate {
             pieces,
-            origin_image: self.origin_image.to_rgba8(),
+            origin_image: scaled_image,
             piece_dimensions: (piece_width, piece_height),
             number_of_pieces: (pieces_in_column, pieces_in_row),
         }
@@ -854,7 +854,7 @@ fn draw_outline(
 #[derive(Debug)]
 pub struct JigsawPiece {
     pub index: usize,
-    pub beziers: Vec<Bezier>,
+    pub sub_path: Subpath<PuzzleId>,
     pub image: RgbaImage,
 }
 
@@ -874,10 +874,11 @@ impl JigsawPiece {
             .into_iter()
             .flatten()
             .collect();
+        let sub_path: Subpath<PuzzleId> = Subpath::from_beziers(&beziers, true);
 
         JigsawPiece {
             index,
-            beziers,
+            sub_path,
             image: Default::default(),
         }
     }
