@@ -9,7 +9,7 @@
 
 use bezier_rs::{Bezier, BezierHandles, Identifier, Subpath};
 use glam::DVec2;
-use image::{DynamicImage, GenericImageView, Rgba};
+use image::{DynamicImage, GenericImageView, Rgba, RgbaImage};
 
 use log::{debug, info};
 use rayon::iter::ParallelIterator;
@@ -78,9 +78,10 @@ pub struct IndentedEdge {
 
 #[allow(dead_code)]
 const RED_COLOR: Rgba<u8> = Rgba([255, 0, 0, 255]);
-
 #[allow(dead_code)]
-const BLACK_COLOR: Rgba<u8> = Rgba([255, 255, 255, 255]);
+const BLACK_COLOR: Rgba<u8> = Rgba([0, 0, 0, 255]);
+#[allow(dead_code)]
+const WHITE_COLOR: Rgba<u8> = Rgba([255, 255, 255, 255]);
 #[allow(dead_code)]
 const YELLOW_COLOR: Rgba<u8> = Rgba([255, 255, 0, 255]);
 
@@ -610,23 +611,22 @@ pub fn build_jigsaw_tiles(
 
     info!("process edge end");
 
+    let mut tiles = vec![];
     let piece_width_offset = (piece_width * 0.01) as f64;
     let piece_height_offset = (piece_height * 0.01) as f64;
-
     for i in 0..(pieces_in_column * pieces_in_row) {
+        debug!("starting process tile {}", i);
         let (top_index, right_index, bottom_index, left_index) =
             get_border_indices(i, pieces_in_column);
-        let mut image = image.clone();
-        let raw_tile = JigsawTile::new(
+        let mut tile = JigsawTile::new(
             i,
             horizontal_edges[top_index].clone(),
             vertical_edges[right_index].clone(),
             horizontal_edges[bottom_index].clone(),
             vertical_edges[left_index].clone(),
         );
-        debug!("new raw tile");
 
-        let sub_path: Subpath<PuzzleId> = Subpath::from_beziers(&raw_tile.beziers, true);
+        let sub_path: Subpath<PuzzleId> = Subpath::from_beziers(&tile.beziers, true);
         // draw debug line
         // draw_debug_line(&mut image, &sub_path);
         let [box_min, box_max] = sub_path.bounding_box().expect("Failed to get bounding box");
@@ -668,17 +668,19 @@ pub fn build_jigsaw_tiles(
                 }
             });
 
+        draw_outline(&mut tile_image, top_left_x, top_left_y, &sub_path);
+
         debug!(
-            "saving image {} ({} {}) {} {}",
+            "processing image {} ({} {}) {} {} end",
             i, top_left_x, top_left_y, width, height
         );
-        tile_image
-            .save(format!("tiles/puzzle_piece_{}.png", i))
-            .expect("Failed to save piece");
-        debug!("saving image {} over", i);
+
+        tile.image = tile_image;
+
+        tiles.push(tile);
     }
 
-    vec![]
+    tiles
 }
 
 /// Scales an image to a maximum width and height
@@ -731,10 +733,52 @@ fn draw_debug_line(image: &mut DynamicImage, sub_path: &Subpath<PuzzleId>) {
     }
 }
 
+fn draw_outline(
+    image: &mut RgbaImage,
+    top_left_x: f64,
+    top_left_y: f64,
+    sub_path: &Subpath<PuzzleId>,
+) {
+    for path in sub_path.iter() {
+        match path.handles {
+            BezierHandles::Linear => {
+                let start = (path.start.x - top_left_x, path.start.y - top_left_y);
+                let end = (path.end.x - top_left_x, path.end.y - top_left_y);
+                imageproc::drawing::draw_line_segment_mut(
+                    image,
+                    (start.0 as f32, start.1 as f32),
+                    (end.0 as f32, end.1 as f32),
+                    WHITE_COLOR,
+                );
+            }
+            BezierHandles::Quadratic { .. } => {}
+            BezierHandles::Cubic {
+                handle_start,
+                handle_end,
+            } => {
+                let start = (path.start.x - top_left_x, path.start.y - top_left_y);
+                let end = (path.end.x - top_left_x, path.end.y - top_left_y);
+                let handle_start = (handle_start.x - top_left_x, handle_start.y - top_left_y);
+                let handle_end = (handle_end.x - top_left_x, handle_end.y - top_left_y);
+
+                imageproc::drawing::draw_cubic_bezier_curve_mut(
+                    image,
+                    (start.0 as f32, start.1 as f32),
+                    (end.0 as f32, end.1 as f32),
+                    (handle_start.0 as f32, handle_start.1 as f32),
+                    (handle_end.0 as f32, handle_end.1 as f32),
+                    WHITE_COLOR,
+                );
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct JigsawTile {
     pub index: usize,
     pub beziers: Vec<Bezier>,
+    pub image: RgbaImage,
 }
 
 impl JigsawTile {
@@ -754,7 +798,11 @@ impl JigsawTile {
             .flatten()
             .collect();
 
-        JigsawTile { index, beziers }
+        JigsawTile {
+            index,
+            beziers,
+            image: Default::default(),
+        }
     }
 }
 
