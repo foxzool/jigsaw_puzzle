@@ -1,10 +1,10 @@
 //! The Jigsaw Puzzle library creates SVG paths which can be used to cut out puzzle pieces from a
 //! given rectangular image. It provides three public functions:
 //!
-//! - [`build_jigsaw_tiles`] returns the paths from a given number of pieces in a column and a
-//! row. This is the function you normally want to use
+//! - [`build_jigsaw_pieces`] returns the paths from a given number of pieces in a column and a
+//!     row. This is the function you normally want to use
 //! - [`generate_columns_rows_numbers`] returns an ideal distribution of pieces on the x- and y-axes
-//! for a given total number of pieces
+//!     for a given total number of pieces
 //! - [`round`] is a util function which approximately rounds a f32 value to two decimal places
 
 use bezier_rs::{Bezier, BezierHandles, Identifier, Subpath};
@@ -443,7 +443,7 @@ fn get_border_indices(position: usize, number_of_columns: usize) -> (usize, usiz
 }
 
 /// Returns the position of a given segment's end
-fn end_point_pos(ind: usize, segments: &Vec<f32>, fallback: f32) -> f32 {
+fn end_point_pos(ind: usize, segments: &[f32], fallback: f32) -> f32 {
     if ind < (segments.len() - 1) {
         segments[ind + 1]
     } else {
@@ -515,7 +515,9 @@ pub fn generate_columns_rows_numbers(
 const MAX_WIDTH: u32 = 1920;
 const MAX_HEIGHT: u32 = 1080;
 
-/// Returns information on how to cut jigsaw puzzle pieces from an image of a given width and
+/// A jigsaw pieces generator
+///
+/// Returns list on how to cut jigsaw puzzle pieces from an image of a given width and
 /// height and the number of pieces in a row and a column as an optional the tab size, a "jitter"
 /// factor and an initial seed value.
 ///
@@ -526,14 +528,80 @@ const MAX_HEIGHT: u32 = 1080;
 ///
 /// `seed` provides the initial "randomness" when creating the contours of the puzzle pieces. Same
 /// seed values for images with same dimensions and same number of pieces lead to same SVG paths.
-pub fn build_jigsaw_tiles(
+pub struct JigsawGenerator {
+    /// The original image from which the jigsaw puzzle pieces will be generated.
+    origin_image: DynamicImage,
+    /// The number of pieces in a column.
+    pieces_in_column: usize,
+    /// The number of pieces in a row.
+    pieces_in_row: usize,
+    /// Optional size of the tabs on the puzzle pieces.
+    tab_size: Option<f32>,
+    /// Optional jitter factor to introduce asymmetry in the puzzle pieces.
+    jitter: Option<f32>,
+    /// Optional seed value for randomness in generating the puzzle pieces.
+    seed: Option<usize>,
+}
+
+impl JigsawGenerator {
+    pub fn new(origin_image: DynamicImage, pieces_in_column: usize, pieces_in_row: usize) -> Self {
+        JigsawGenerator {
+            origin_image,
+            pieces_in_column,
+            pieces_in_row,
+            tab_size: None,
+            jitter: None,
+            seed: None,
+        }
+    }
+
+    pub fn tab_size(mut self, tab_size: f32) -> Self {
+        self.tab_size = Some(tab_size);
+        self
+    }
+
+    pub fn jitter(mut self, jitter: f32) -> Self {
+        self.jitter = Some(jitter);
+        self
+    }
+
+    pub fn seed(mut self, seed: usize) -> Self {
+        self.seed = Some(seed);
+        self
+    }
+
+    pub fn generate(&self) -> JigsawTemplate {
+        build_jigsaw_pieces(
+            self.origin_image.clone(),
+            self.pieces_in_column,
+            self.pieces_in_row,
+            self.tab_size,
+            self.jitter,
+            self.seed,
+        )
+    }
+}
+
+#[derive(Debug)]
+pub struct JigsawTemplate {
+    /// The generated jigsaw puzzle pieces
+    pub pieces: Vec<JigsawPiece>,
+    /// The original image from which the jigsaw puzzle pieces will be generated.
+    pub origin_image: RgbaImage,
+    /// The dimensions (width, length) in pixel
+    pub piece_dimensions: (f32, f32),
+    /// The number of pieces in the x- and the y-axis
+    pub number_of_pieces: (usize, usize),
+}
+
+pub fn build_jigsaw_pieces(
     mut image: DynamicImage,
     pieces_in_column: usize,
     pieces_in_row: usize,
     tab_size: Option<f32>,
     jitter: Option<f32>,
     seed: Option<usize>,
-) -> Vec<JigsawTile> {
+) -> JigsawTemplate {
     scale_image(&mut image);
     let (image_width, image_height) = image.dimensions();
     debug!(
@@ -611,14 +679,14 @@ pub fn build_jigsaw_tiles(
 
     info!("process edge end");
 
-    let mut tiles = vec![];
+    let mut pieces = vec![];
     let piece_width_offset = (piece_width * 0.01) as f64;
     let piece_height_offset = (piece_height * 0.01) as f64;
     for i in 0..(pieces_in_column * pieces_in_row) {
-        debug!("starting process tile {}", i);
+        debug!("starting process piece {}", i);
         let (top_index, right_index, bottom_index, left_index) =
             get_border_indices(i, pieces_in_column);
-        let mut tile = JigsawTile::new(
+        let mut piece = JigsawPiece::new(
             i,
             horizontal_edges[top_index].clone(),
             vertical_edges[right_index].clone(),
@@ -626,7 +694,7 @@ pub fn build_jigsaw_tiles(
             vertical_edges[left_index].clone(),
         );
 
-        let sub_path: Subpath<PuzzleId> = Subpath::from_beziers(&tile.beziers, true);
+        let sub_path: Subpath<PuzzleId> = Subpath::from_beziers(&piece.beziers, true);
         // draw debug line
         // draw_debug_line(&mut image, &sub_path);
         let [box_min, box_max] = sub_path.bounding_box().expect("Failed to get bounding box");
@@ -649,7 +717,7 @@ pub fn build_jigsaw_tiles(
         //     YELLOW_COLOR,
         // );
 
-        let mut tile_image = image
+        let mut piece_image = image
             .view(
                 top_left_x as u32,
                 top_left_y as u32,
@@ -658,7 +726,7 @@ pub fn build_jigsaw_tiles(
             )
             .to_image();
 
-        tile_image
+        piece_image
             .par_enumerate_pixels_mut()
             .for_each(|(x, y, pixel)| {
                 let point = DVec2::new(top_left_x + x as f64, top_left_y + y as f64);
@@ -668,19 +736,24 @@ pub fn build_jigsaw_tiles(
                 }
             });
 
-        draw_outline(&mut tile_image, top_left_x, top_left_y, &sub_path);
+        draw_outline(&mut piece_image, top_left_x, top_left_y, &sub_path);
 
         debug!(
             "processing image {} ({} {}) {} {} end",
             i, top_left_x, top_left_y, width, height
         );
 
-        tile.image = tile_image;
+        piece.image = piece_image;
 
-        tiles.push(tile);
+        pieces.push(piece);
     }
 
-    tiles
+    JigsawTemplate {
+        pieces,
+        origin_image: image.to_rgba8(),
+        piece_dimensions: (piece_width, piece_height),
+        number_of_pieces: (pieces_in_column, pieces_in_row),
+    }
 }
 
 /// Scales an image to a maximum width and height
@@ -775,13 +848,13 @@ fn draw_outline(
 }
 
 #[derive(Debug)]
-pub struct JigsawTile {
+pub struct JigsawPiece {
     pub index: usize,
     pub beziers: Vec<Bezier>,
     pub image: RgbaImage,
 }
 
-impl JigsawTile {
+impl JigsawPiece {
     pub fn new(
         index: usize,
         top_edge: Edge,
@@ -798,7 +871,7 @@ impl JigsawTile {
             .flatten()
             .collect();
 
-        JigsawTile {
+        JigsawPiece {
             index,
             beziers,
             image: Default::default(),
