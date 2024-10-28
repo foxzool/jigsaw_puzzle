@@ -11,6 +11,7 @@ use bezier_rs::{Bezier, BezierHandles, Identifier, Subpath};
 use glam::DVec2;
 use image::{DynamicImage, GenericImageView, Rgba, RgbaImage};
 
+use imageproc::definitions::Image;
 use log::{debug, info};
 use rayon::iter::ParallelIterator;
 use std::f32;
@@ -570,15 +571,167 @@ impl JigsawGenerator {
         self
     }
 
-    pub fn generate(&self) -> JigsawTemplate {
-        build_jigsaw_pieces(
-            self.origin_image.clone(),
-            self.pieces_in_column,
-            self.pieces_in_row,
+    pub fn generate(self) -> JigsawTemplate {
+        let new_image = scale_image(&self.origin_image);
+        let (image_width, image_height) = new_image.dimensions();
+        debug!(
+            "start processing image with {}x{}",
+            image_width, image_height
+        );
+        let image_width = image_width as f32;
+        let image_height = image_height as f32;
+        let pieces_in_column = self.pieces_in_column;
+        let pieces_in_row = self.pieces_in_row;
+        let (starting_points_x, piece_width) = divide_axis(image_width, pieces_in_column);
+        let (starting_points_y, piece_height) = divide_axis(image_height, pieces_in_row);
+        let mut contour_gen = EdgeContourGenerator::new(
+            piece_width,
+            piece_height,
             self.tab_size,
             self.jitter,
             self.seed,
-        )
+        );
+        let mut vertical_edges = vec![];
+        let mut horizontal_edges = vec![];
+        let mut top_border = true;
+        for index_y in 0..starting_points_y.len() {
+            let mut left_border = true;
+            for index_x in 0..starting_points_x.len() {
+                horizontal_edges.push(if top_border {
+                    Edge::StraightEdge(StraightEdge {
+                        starting_point: (starting_points_x[index_x], 0.0),
+                        end_point: (end_point_pos(index_x, &starting_points_x, image_width), 0.0),
+                    })
+                } else {
+                    Edge::IndentedEdge(IndentedEdge::new(
+                        (starting_points_x[index_x], starting_points_y[index_y]),
+                        (
+                            end_point_pos(index_x, &starting_points_x, image_width),
+                            starting_points_y[index_y],
+                        ),
+                        &mut contour_gen,
+                    ))
+                });
+                vertical_edges.push(if left_border {
+                    Edge::StraightEdge(StraightEdge {
+                        starting_point: (0.0, starting_points_y[index_y]),
+                        end_point: (
+                            0.0,
+                            end_point_pos(index_y, &starting_points_y, image_height),
+                        ),
+                    })
+                } else {
+                    Edge::IndentedEdge(IndentedEdge::new(
+                        (starting_points_x[index_x], starting_points_y[index_y]),
+                        (
+                            starting_points_x[index_x],
+                            end_point_pos(index_y, &starting_points_y, image_height),
+                        ),
+                        &mut contour_gen,
+                    ))
+                });
+                left_border = false;
+            }
+            top_border = false;
+            // Draw right outer edge
+            vertical_edges.push(Edge::StraightEdge(StraightEdge {
+                starting_point: (image_width, starting_points_y[index_y]),
+                end_point: (
+                    image_width,
+                    end_point_pos(index_y, &starting_points_y, image_height),
+                ),
+            }));
+        }
+
+        // Draw bottom outer edges
+        for index_x in 0..starting_points_x.len() {
+            horizontal_edges.push(Edge::StraightEdge(StraightEdge {
+                starting_point: (starting_points_x[index_x], image_height),
+                end_point: (
+                    end_point_pos(index_x, &starting_points_x, image_width),
+                    image_height,
+                ),
+            }))
+        }
+
+        info!("process edge end");
+
+        let mut pieces = vec![];
+        let piece_width_offset = (piece_width * 0.01) as f64;
+        let piece_height_offset = (piece_height * 0.01) as f64;
+        for i in 0..(pieces_in_column * pieces_in_row) {
+            debug!("starting process piece {}", i);
+            let (top_index, right_index, bottom_index, left_index) =
+                get_border_indices(i, pieces_in_column);
+            let mut piece = JigsawPiece::new(
+                i,
+                horizontal_edges[top_index].clone(),
+                vertical_edges[right_index].clone(),
+                horizontal_edges[bottom_index].clone(),
+                vertical_edges[left_index].clone(),
+            );
+
+            let sub_path: Subpath<PuzzleId> = Subpath::from_beziers(&piece.beziers, true);
+            // draw debug line
+            // draw_debug_line(&mut image, &sub_path);
+            let [box_min, box_max] = sub_path.bounding_box().expect("Failed to get bounding box");
+            let top_left_x = (box_min.x - piece_width_offset).max(0.0);
+            let top_left_y = (box_min.y - piece_height_offset).max(0.0);
+            let mut width =
+                (box_max.x - box_min.x + 2.0 * piece_width_offset).max(piece_width as f64);
+            let mut height =
+                (box_max.y - box_min.y + 2.0 * piece_height_offset).max(piece_height as f64);
+            if top_left_x + width > image_width as f64 {
+                width = image_width as f64 - top_left_x + 1.0;
+            }
+            if top_left_y + height > image_height as f64 {
+                height = (image_height as f64 - top_left_y) + 1.0;
+            }
+
+            // draw debug bbox
+            // draw_hollow_rect_mut(
+            //     &mut image,
+            //     Rect::at(top_left_x as i32, top_left_y as i32).of_size(width as u32, height as u32),
+            //     YELLOW_COLOR,
+            // );
+
+            let mut piece_image = new_image
+                .view(
+                    top_left_x as u32,
+                    top_left_y as u32,
+                    width as u32,
+                    height as u32,
+                )
+                .to_image();
+
+            piece_image
+                .par_enumerate_pixels_mut()
+                .for_each(|(x, y, pixel)| {
+                    let point = DVec2::new(top_left_x + x as f64, top_left_y + y as f64);
+                    if !sub_path.contains_point(point) {
+                        // println!("{},{}", point.x, point.y);
+                        *pixel = Rgba([0, 0, 0, 0])
+                    }
+                });
+
+            draw_outline(&mut piece_image, top_left_x, top_left_y, &sub_path);
+
+            debug!(
+                "processing image {} ({} {}) {} {} end",
+                i, top_left_x, top_left_y, width, height
+            );
+
+            piece.image = piece_image;
+
+            pieces.push(piece);
+        }
+
+        JigsawTemplate {
+            pieces,
+            origin_image: self.origin_image.to_rgba8(),
+            piece_dimensions: (piece_width, piece_height),
+            number_of_pieces: (pieces_in_column, pieces_in_row),
+        }
     }
 }
 
@@ -594,171 +747,18 @@ pub struct JigsawTemplate {
     pub number_of_pieces: (usize, usize),
 }
 
-pub fn build_jigsaw_pieces(
-    mut image: DynamicImage,
-    pieces_in_column: usize,
-    pieces_in_row: usize,
-    tab_size: Option<f32>,
-    jitter: Option<f32>,
-    seed: Option<usize>,
-) -> JigsawTemplate {
-    scale_image(&mut image);
-    let (image_width, image_height) = image.dimensions();
-    debug!(
-        "start processing image with {}x{}",
-        image_width, image_height
-    );
-    let image_width = image_width as f32;
-    let image_height = image_height as f32;
-    let (starting_points_x, piece_width) = divide_axis(image_width, pieces_in_column);
-    let (starting_points_y, piece_height) = divide_axis(image_height, pieces_in_row);
-    let mut contour_gen =
-        EdgeContourGenerator::new(piece_width, piece_height, tab_size, jitter, seed);
-    let mut vertical_edges = vec![];
-    let mut horizontal_edges = vec![];
-    let mut top_border = true;
-    for index_y in 0..starting_points_y.len() {
-        let mut left_border = true;
-        for index_x in 0..starting_points_x.len() {
-            horizontal_edges.push(if top_border {
-                Edge::StraightEdge(StraightEdge {
-                    starting_point: (starting_points_x[index_x], 0.0),
-                    end_point: (end_point_pos(index_x, &starting_points_x, image_width), 0.0),
-                })
-            } else {
-                Edge::IndentedEdge(IndentedEdge::new(
-                    (starting_points_x[index_x], starting_points_y[index_y]),
-                    (
-                        end_point_pos(index_x, &starting_points_x, image_width),
-                        starting_points_y[index_y],
-                    ),
-                    &mut contour_gen,
-                ))
-            });
-            vertical_edges.push(if left_border {
-                Edge::StraightEdge(StraightEdge {
-                    starting_point: (0.0, starting_points_y[index_y]),
-                    end_point: (
-                        0.0,
-                        end_point_pos(index_y, &starting_points_y, image_height),
-                    ),
-                })
-            } else {
-                Edge::IndentedEdge(IndentedEdge::new(
-                    (starting_points_x[index_x], starting_points_y[index_y]),
-                    (
-                        starting_points_x[index_x],
-                        end_point_pos(index_y, &starting_points_y, image_height),
-                    ),
-                    &mut contour_gen,
-                ))
-            });
-            left_border = false;
-        }
-        top_border = false;
-        // Draw right outer edge
-        vertical_edges.push(Edge::StraightEdge(StraightEdge {
-            starting_point: (image_width, starting_points_y[index_y]),
-            end_point: (
-                image_width,
-                end_point_pos(index_y, &starting_points_y, image_height),
-            ),
-        }));
-    }
-
-    // Draw bottom outer edges
-    for index_x in 0..starting_points_x.len() {
-        horizontal_edges.push(Edge::StraightEdge(StraightEdge {
-            starting_point: (starting_points_x[index_x], image_height),
-            end_point: (
-                end_point_pos(index_x, &starting_points_x, image_width),
-                image_height,
-            ),
-        }))
-    }
-
-    info!("process edge end");
-
-    let mut pieces = vec![];
-    let piece_width_offset = (piece_width * 0.01) as f64;
-    let piece_height_offset = (piece_height * 0.01) as f64;
-    for i in 0..(pieces_in_column * pieces_in_row) {
-        debug!("starting process piece {}", i);
-        let (top_index, right_index, bottom_index, left_index) =
-            get_border_indices(i, pieces_in_column);
-        let mut piece = JigsawPiece::new(
-            i,
-            horizontal_edges[top_index].clone(),
-            vertical_edges[right_index].clone(),
-            horizontal_edges[bottom_index].clone(),
-            vertical_edges[left_index].clone(),
-        );
-
-        let sub_path: Subpath<PuzzleId> = Subpath::from_beziers(&piece.beziers, true);
-        // draw debug line
-        // draw_debug_line(&mut image, &sub_path);
-        let [box_min, box_max] = sub_path.bounding_box().expect("Failed to get bounding box");
-        let top_left_x = (box_min.x - piece_width_offset).max(0.0);
-        let top_left_y = (box_min.y - piece_height_offset).max(0.0);
-        let mut width = (box_max.x - box_min.x + 2.0 * piece_width_offset).max(piece_width as f64);
-        let mut height =
-            (box_max.y - box_min.y + 2.0 * piece_height_offset).max(piece_height as f64);
-        if top_left_x + width > image_width as f64 {
-            width = image_width as f64 - top_left_x + 1.0;
-        }
-        if top_left_y + height > image_height as f64 {
-            height = (image_height as f64 - top_left_y) + 1.0;
-        }
-
-        // draw debug bbox
-        // draw_hollow_rect_mut(
-        //     &mut image,
-        //     Rect::at(top_left_x as i32, top_left_y as i32).of_size(width as u32, height as u32),
-        //     YELLOW_COLOR,
-        // );
-
-        let mut piece_image = image
-            .view(
-                top_left_x as u32,
-                top_left_y as u32,
-                width as u32,
-                height as u32,
-            )
-            .to_image();
-
-        piece_image
-            .par_enumerate_pixels_mut()
-            .for_each(|(x, y, pixel)| {
-                let point = DVec2::new(top_left_x + x as f64, top_left_y + y as f64);
-                if !sub_path.contains_point(point) {
-                    // println!("{},{}", point.x, point.y);
-                    *pixel = Rgba([0, 0, 0, 0])
-                }
-            });
-
-        draw_outline(&mut piece_image, top_left_x, top_left_y, &sub_path);
-
-        debug!(
-            "processing image {} ({} {}) {} {} end",
-            i, top_left_x, top_left_y, width, height
-        );
-
-        piece.image = piece_image;
-
-        pieces.push(piece);
-    }
-
-    JigsawTemplate {
-        pieces,
-        origin_image: image.to_rgba8(),
-        piece_dimensions: (piece_width, piece_height),
-        number_of_pieces: (pieces_in_column, pieces_in_row),
-    }
-}
-
-/// Scales an image to a maximum width and height
-#[allow(dead_code)]
-fn scale_image(image: &mut DynamicImage) {
+/// Scales the given image to fit within the maximum width and height constraints.
+/// If the image dimensions exceed the maximum allowed dimensions, it scales the image down
+/// while maintaining the aspect ratio. Otherwise, it returns the original image.
+///
+/// # Arguments
+///
+/// * `image` - A reference to the `DynamicImage` that needs to be scaled.
+///
+/// # Returns
+///
+/// * `RgbaImage` - The scaled image as an `RgbaImage`.
+fn scale_image(image: &DynamicImage) -> RgbaImage {
     let (width, height) = image.dimensions();
     let scale = if width > MAX_WIDTH || height > MAX_HEIGHT {
         let scale_x = MAX_WIDTH as f32 / width as f32;
@@ -768,11 +768,15 @@ fn scale_image(image: &mut DynamicImage) {
         1.0
     };
     if scale < 1.0 {
-        *image = image.resize(
-            (width as f32 * scale) as u32,
-            (height as f32 * scale) as u32,
-            image::imageops::FilterType::Lanczos3,
-        );
+        image
+            .resize(
+                (width as f32 * scale) as u32,
+                (height as f32 * scale) as u32,
+                image::imageops::FilterType::Lanczos3,
+            )
+            .to_rgba8()
+    } else {
+        image.to_rgba8()
     }
 }
 

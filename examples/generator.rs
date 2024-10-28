@@ -10,8 +10,9 @@ fn main() {
     }
     let env = Env::default();
     Builder::from_env(env).format_timestamp_millis().init();
-    info!("Start to load image");
-    let img = image::open("images/raw.jpeg").expect("Failed to open image");
+    let image_path = env::args().nth(1).unwrap_or("images/raw.jpeg".to_string());
+    info!("Start to load {}", image_path);
+    let img = image::open(image_path).expect("Failed to open image");
     info!("load image successfully!");
     let template = JigsawGenerator::new(img, 9, 6).generate();
     create_dir_all("tiles").expect("Failed to create tiles directory");
