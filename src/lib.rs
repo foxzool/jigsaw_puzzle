@@ -568,7 +568,7 @@ impl JigsawGenerator {
     }
 
     pub fn generate(self) -> JigsawTemplate {
-        let mut scaled_image = scale_image(&self.origin_image);
+        let scaled_image = scale_image(&self.origin_image);
         let (image_width, image_height) = scaled_image.dimensions();
         debug!(
             "start processing image with {}x{}",
@@ -653,13 +653,11 @@ impl JigsawGenerator {
         info!("process edge end");
 
         let mut pieces = vec![];
-        let piece_width_offset = (piece_width * 0.01) as f64;
-        let piece_height_offset = (piece_height * 0.01) as f64;
         for i in 0..(pieces_in_column * pieces_in_row) {
             debug!("starting process piece {}", i);
             let (top_index, right_index, bottom_index, left_index) =
                 get_border_indices(i, pieces_in_column);
-            let mut piece = JigsawPiece::new(
+            let piece = JigsawPiece::new(
                 i,
                 horizontal_edges[top_index].clone(),
                 vertical_edges[right_index].clone(),
@@ -670,58 +668,9 @@ impl JigsawGenerator {
             debug!("calc beziers end {}", i);
 
             // draw debug line
-            piece.draw_debug_line(&mut scaled_image);
-            let [box_min, box_max] = piece
-                .sub_path
-                .bounding_box()
-                .expect("Failed to get bounding box");
-            let top_left_x = (box_min.x - piece_width_offset).max(0.0);
-            let top_left_y = (box_min.y - piece_height_offset).max(0.0);
-            let mut width =
-                (box_max.x - box_min.x + 2.0 * piece_width_offset).max(piece_width as f64);
-            let mut height =
-                (box_max.y - box_min.y + 2.0 * piece_height_offset).max(piece_height as f64);
-            if top_left_x + width > image_width as f64 {
-                width = image_width as f64 - top_left_x + 1.0;
-            }
-            if top_left_y + height > image_height as f64 {
-                height = (image_height as f64 - top_left_y) + 1.0;
-            }
+            // piece.draw_debug_line(&mut scaled_image);
 
-            // draw debug bbox
-            // draw_hollow_rect_mut(
-            //     &mut image,
-            //     Rect::at(top_left_x as i32, top_left_y as i32).of_size(width as u32, height as u32),
-            //     YELLOW_COLOR,
-            // );
-
-            let mut piece_image = scaled_image
-                .view(
-                    top_left_x as u32,
-                    top_left_y as u32,
-                    width as u32,
-                    height as u32,
-                )
-                .to_image();
-
-            piece_image
-                .par_enumerate_pixels_mut()
-                .for_each(|(x, y, pixel)| {
-                    let point = DVec2::new(top_left_x + x as f64, top_left_y + y as f64);
-                    if !piece.sub_path.contains_point(point) {
-                        // println!("{},{}", point.x, point.y);
-                        *pixel = Rgba([0, 0, 0, 0])
-                    }
-                });
-
-            draw_outline(&mut piece_image, top_left_x, top_left_y, &piece.sub_path);
-
-            debug!(
-                "processing image {} ({} {}) {} {} end",
-                i, top_left_x, top_left_y, width, height
-            );
-
-            piece.image = piece_image;
+            // piece.image = piece_image;
 
             pieces.push(piece);
         }
@@ -745,6 +694,63 @@ pub struct JigsawTemplate {
     pub piece_dimensions: (f32, f32),
     /// The number of pieces in the x- and the y-axis
     pub number_of_pieces: (usize, usize),
+}
+
+impl JigsawTemplate {
+    pub fn crop(&self, piece: &JigsawPiece) -> RgbaImage {
+        let (image_width, image_height) = self.origin_image.dimensions();
+        let (piece_width, piece_height) = self.piece_dimensions;
+        let piece_width_offset = (piece_width * 0.01) as f64;
+        let piece_height_offset = (piece_height * 0.01) as f64;
+        let box_min = piece.box_min;
+        let box_max = piece.box_max;
+        let top_left_x = (box_min.x - piece_width_offset).max(0.0);
+        let top_left_y = (box_min.y - piece_height_offset).max(0.0);
+        let mut width = (box_max.x - box_min.x + 2.0 * piece_width_offset).max(piece_width as f64);
+        let mut height =
+            (box_max.y - box_min.y + 2.0 * piece_height_offset).max(piece_height as f64);
+        if top_left_x + width > image_width as f64 {
+            width = image_width as f64 - top_left_x + 1.0;
+        }
+        if top_left_y + height > image_height as f64 {
+            height = (image_height as f64 - top_left_y) + 1.0;
+        }
+
+        // draw debug bbox
+        // draw_hollow_rect_mut(
+        //     &mut image,
+        //     Rect::at(top_left_x as i32, top_left_y as i32).of_size(width as u32, height as u32),
+        //     YELLOW_COLOR,
+        // );
+
+        let mut piece_image = self
+            .origin_image
+            .view(
+                top_left_x as u32,
+                top_left_y as u32,
+                width as u32,
+                height as u32,
+            )
+            .to_image();
+
+        piece_image
+            .par_enumerate_pixels_mut()
+            .for_each(|(x, y, pixel)| {
+                let point = DVec2::new(top_left_x + x as f64, top_left_y + y as f64);
+                if !piece.sub_path.contains_point(point) {
+                    *pixel = Rgba([0, 0, 0, 0])
+                }
+            });
+
+        draw_outline(&mut piece_image, top_left_x, top_left_y, &piece.sub_path);
+
+        debug!(
+            "processing image {} ({} {}) {} {} end",
+            piece.index, top_left_x, top_left_y, width, height
+        );
+
+        piece_image
+    }
 }
 
 /// Scales the given image to fit within the maximum width and height constraints.
@@ -825,7 +831,8 @@ fn draw_outline(
 pub struct JigsawPiece {
     pub index: usize,
     pub sub_path: Subpath<PuzzleId>,
-    pub image: RgbaImage,
+    pub box_min: DVec2,
+    pub box_max: DVec2,
 }
 
 impl JigsawPiece {
@@ -845,11 +852,13 @@ impl JigsawPiece {
             .flatten()
             .collect();
         let sub_path: Subpath<PuzzleId> = Subpath::from_beziers(&beziers, true);
+        let [box_min, box_max] = sub_path.bounding_box().expect("Failed to get bounding box");
 
         JigsawPiece {
             index,
             sub_path,
-            image: Default::default(),
+            box_min,
+            box_max,
         }
     }
 

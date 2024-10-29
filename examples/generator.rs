@@ -20,9 +20,10 @@ fn main() {
         .save("tiles/origin_image.png")
         .expect("Failed to save image");
     create_dir_all("tiles").expect("Failed to create tiles directory");
+
     for piece in template.pieces.iter() {
-        piece
-            .image
+        template
+            .crop(piece)
             .save(format!("tiles/puzzle_piece_{}.png", piece.index))
             .expect("Failed to save image");
     }
