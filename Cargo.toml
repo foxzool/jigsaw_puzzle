@@ -11,7 +11,7 @@ members = [
 
 
 [dependencies]
-
+bevy = { version = "0.15.0-rc.2", features = ["wayland"] }
 
 [dev-dependencies]
 

@@ -5,6 +5,7 @@
 # Jigsaw Puzzle Generator
 
 `jigsaw_puzzle_generator` is a simple helper to generate jigsaw puzzle in Rust.
+Inspired by the [puzzle-paths](https://gitlab.switch.ch/ub-unibas/puzzle-app/puzzle-paths)
 
 ## Usage
 
