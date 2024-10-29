@@ -10,11 +10,15 @@ fn main() {
     }
     let env = Env::default();
     Builder::from_env(env).format_timestamp_millis().init();
-    let image_path = env::args().nth(1).unwrap_or("images/raw.jpeg".to_string());
+    let image_path = env::args().nth(1).unwrap_or("raw.jpg".to_string());
     info!("Start to load {}", image_path);
     let img = image::open(image_path).expect("Failed to open image");
     info!("load image successfully!");
     let template = JigsawGenerator::new(img, 9, 6).generate();
+    template
+        .origin_image
+        .save("tiles/origin_image.png")
+        .expect("Failed to save image");
     create_dir_all("tiles").expect("Failed to create tiles directory");
     for piece in template.pieces.iter() {
         piece

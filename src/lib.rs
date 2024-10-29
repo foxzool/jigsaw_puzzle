@@ -19,6 +19,9 @@ use std::vec;
 const DEFAULT_TAB_SIZE: f32 = 20.0;
 const DEFAULT_JITTER: f32 = 1.0;
 
+const MAX_WIDTH: u32 = 1920;
+const MAX_HEIGHT: u32 = 1200;
+
 /// A segment of an indented puzzle piece edge. A segment is described by a cubic Bézier curve,
 /// which includes a starting point, an end point and two control points. Three segments make up a
 /// piece's edge.
@@ -509,9 +512,6 @@ pub fn generate_columns_rows_numbers(
     optimal_aspect_ratio(divisor_pairs, image_width, image_height)
 }
 
-const MAX_WIDTH: u32 = 1920;
-const MAX_HEIGHT: u32 = 1080;
-
 /// A jigsaw pieces generator
 ///
 /// Returns list on how to cut jigsaw puzzle pieces from an image of a given width and
@@ -568,7 +568,7 @@ impl JigsawGenerator {
     }
 
     pub fn generate(self) -> JigsawTemplate {
-        let scaled_image = scale_image(&self.origin_image);
+        let mut scaled_image = scale_image(&self.origin_image);
         let (image_width, image_height) = scaled_image.dimensions();
         debug!(
             "start processing image with {}x{}",
@@ -670,7 +670,7 @@ impl JigsawGenerator {
             debug!("calc beziers end {}", i);
 
             // draw debug line
-            // draw_debug_line(&mut image, &sub_path);
+            piece.draw_debug_line(&mut scaled_image);
             let [box_min, box_max] = piece
                 .sub_path
                 .bounding_box()
@@ -780,36 +780,6 @@ fn scale_image(image: &DynamicImage) -> RgbaImage {
     }
 }
 
-#[allow(dead_code)]
-fn draw_debug_line(image: &mut DynamicImage, sub_path: &Subpath<PuzzleId>) {
-    for path in sub_path.iter() {
-        match path.handles {
-            BezierHandles::Linear => {
-                imageproc::drawing::draw_line_segment_mut(
-                    image,
-                    (path.start.x as f32, path.start.y as f32),
-                    (path.end.x as f32, path.end.y as f32),
-                    BLACK_COLOR,
-                );
-            }
-            BezierHandles::Quadratic { .. } => {}
-            BezierHandles::Cubic {
-                handle_start,
-                handle_end,
-            } => {
-                imageproc::drawing::draw_cubic_bezier_curve_mut(
-                    image,
-                    (path.start.x as f32, path.start.y as f32),
-                    (path.end.x as f32, path.end.y as f32),
-                    (handle_start.x as f32, handle_start.y as f32),
-                    (handle_end.x as f32, handle_end.y as f32),
-                    RED_COLOR,
-                );
-            }
-        }
-    }
-}
-
 fn draw_outline(
     image: &mut RgbaImage,
     top_left_x: f64,
@@ -880,6 +850,36 @@ impl JigsawPiece {
             index,
             sub_path,
             image: Default::default(),
+        }
+    }
+
+    #[allow(dead_code)]
+    fn draw_debug_line(&self, image: &mut RgbaImage) {
+        for path in self.sub_path.iter() {
+            match path.handles {
+                BezierHandles::Linear => {
+                    imageproc::drawing::draw_line_segment_mut(
+                        image,
+                        (path.start.x as f32, path.start.y as f32),
+                        (path.end.x as f32, path.end.y as f32),
+                        WHITE_COLOR,
+                    );
+                }
+                BezierHandles::Quadratic { .. } => {}
+                BezierHandles::Cubic {
+                    handle_start,
+                    handle_end,
+                } => {
+                    imageproc::drawing::draw_cubic_bezier_curve_mut(
+                        image,
+                        (path.start.x as f32, path.start.y as f32),
+                        (path.end.x as f32, path.end.y as f32),
+                        (handle_start.x as f32, handle_start.y as f32),
+                        (handle_end.x as f32, handle_end.y as f32),
+                        WHITE_COLOR,
+                    );
+                }
+            }
         }
     }
 }
