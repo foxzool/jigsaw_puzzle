@@ -1,16 +1,18 @@
 [package]
-name = "bevy_jigsaw_puzzle"
+name = "jigsaw_puzzle"
 version = "0.1.0"
 edition = "2021"
 
+[workspace]
+resolver = "2"
+members = [
+    "jigsaw_puzzle_generator",
+]
+
+
 [dependencies]
-bezier-rs = "0.4.0"
-glam = "=0.24.2"
-image = { version = "0.25.4", features = ["rayon"] }
-imageproc = "0.25.0"
-log = "0.4.22"
-rayon = "1.10.0"
-rand = "0.8.5"
+
 
 [dev-dependencies]
-env_logger = "0.11.5"
+
+

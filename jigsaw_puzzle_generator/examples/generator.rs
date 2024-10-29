@@ -1,5 +1,5 @@
-use bevy_jigsaw_puzzle::JigsawGenerator;
 use env_logger::{Builder, Env};
+use jigsaw_puzzle_generator::JigsawGenerator;
 use log::info;
 use std::env;
 use std::fs::create_dir_all;
