@@ -8,16 +8,17 @@
 //! - [`round`] is a util function which approximately rounds a f32 value to two decimal places
 
 use bezier_rs::{Bezier, BezierHandles, Identifier, Subpath};
-use glam::DVec2;
+use glam::{DAffine2, DMat2, DVec2};
 use image::{DynamicImage, GenericImageView, Rgba, RgbaImage};
 
 use log::{debug, info};
 use rayon::iter::ParallelIterator;
 use std::f32;
+use std::f64::consts::FRAC_2_PI;
 use std::vec;
 
 const DEFAULT_TAB_SIZE: f32 = 20.0;
-const DEFAULT_JITTER: f32 = 1.0;
+const DEFAULT_JITTER: f32 = 5.0;
 
 const MAX_WIDTH: u32 = 1920;
 const MAX_HEIGHT: u32 = 1200;
@@ -737,12 +738,12 @@ impl JigsawTemplate {
             .par_enumerate_pixels_mut()
             .for_each(|(x, y, pixel)| {
                 let point = DVec2::new(top_left_x + x as f64, top_left_y + y as f64);
-                if !piece.sub_path.contains_point(point) {
+                if !piece.contains(point) {
                     *pixel = Rgba([0, 0, 0, 0])
                 }
             });
 
-        draw_outline(&mut piece_image, top_left_x, top_left_y, &piece.sub_path);
+        draw_outline(&mut piece_image, top_left_x, top_left_y, &piece.subpath);
 
         debug!(
             "processing image {} ({} {}) {} {} end",
@@ -830,7 +831,7 @@ fn draw_outline(
 #[derive(Debug)]
 pub struct JigsawPiece {
     pub index: usize,
-    pub sub_path: Subpath<PuzzleId>,
+    pub subpath: Subpath<PuzzleId>,
     pub box_min: DVec2,
     pub box_max: DVec2,
 }
@@ -844,27 +845,43 @@ impl JigsawPiece {
         left_edge: Edge,
     ) -> Self {
         let top_beziers = top_edge.to_beziers(false);
+
         let right_beziers = right_edge.to_beziers(false);
+
         let bottom_beziers = bottom_edge.to_beziers(true);
+
         let left_beziers = left_edge.to_beziers(true);
+
         let beziers: Vec<_> = vec![top_beziers, right_beziers, bottom_beziers, left_beziers]
             .into_iter()
             .flatten()
             .collect();
-        let sub_path: Subpath<PuzzleId> = Subpath::from_beziers(&beziers, true);
-        let [box_min, box_max] = sub_path.bounding_box().expect("Failed to get bounding box");
+        let subpath: Subpath<PuzzleId> = Subpath::from_beziers(&beziers, true);
+        let [box_min, box_max] = subpath.bounding_box().expect("Failed to get bounding box");
 
         JigsawPiece {
             index,
-            sub_path,
+            subpath,
             box_min,
             box_max,
         }
     }
 
+    /// Checks if a given point is inside the puzzle piece
+    /// Trick: Check if the point is inside the rotated subpath. If not, check if it is inside the original subpath
+    fn contains(&self, point: DVec2) -> bool {
+        self.subpath.point_inside(
+            point,
+            // self.rotation_matrix1,
+            // self.rotation_matrix2,
+            // &self.rotated_subpath1,
+            // &self.rotated_subpath2,
+        ) || self.subpath.contains_point(point)
+    }
+
     #[allow(dead_code)]
     fn draw_debug_line(&self, image: &mut RgbaImage) {
-        for path in self.sub_path.iter() {
+        for path in self.subpath.iter() {
             match path.handles {
                 BezierHandles::Linear => {
                     imageproc::drawing::draw_line_segment_mut(
