@@ -697,6 +697,7 @@ pub struct JigsawTemplate {
 }
 
 impl JigsawTemplate {
+    ///
     pub fn crop(&self, piece: &JigsawPiece) -> RgbaImage {
         let (image_width, image_height) = self.origin_image.dimensions();
         let (piece_width, piece_height) = self.piece_dimensions;

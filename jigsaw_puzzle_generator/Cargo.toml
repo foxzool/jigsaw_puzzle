@@ -1,7 +1,17 @@
 [package]
 name = "jigsaw_puzzle_generator"
 version = "0.1.0"
+authors = ["FoxZoOL <zhooul@gmail.com>"]
+readme = "README.md"
 edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/foxzool/jigsaw_puzzle/jigsaw_puzzle_generator"
+homepage = "https://github.com/foxzool/jigsaw_puzzle"
+documentation = "https://docs.rs/jigsaw_puzzle_generator"
+description = "Library for generating jigsaw puzzle images"
+categories = ["graphics", "multimedia::images", "game-development"]
+keywords = ["svg", "puzzle", "template", "game"]
+
 
 [dependencies]
 bezier-rs = "0.4.0"
@@ -14,3 +24,6 @@ rand = "0.8.5"
 
 [dev-dependencies]
 env_logger = "0.11.5"
+
+[[example]]
+name = "generator"

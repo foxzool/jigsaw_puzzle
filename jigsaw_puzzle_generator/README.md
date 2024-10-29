@@ -1,19 +1,18 @@
-use env_logger::{Builder, Env};
-use jigsaw_puzzle_generator::JigsawGenerator;
-use log::info;
-use std::env;
-use std::fs::create_dir_all;
+[![crates.io](https://img.shields.io/crates/v/jigsaw_puzzle_generator)](https://crates.io/crates/jigsaw_puzzle_generator)
+[![MIT/Apache 2.0](https://img.shields.io/badge/license-MIT%2FApache-blue.svg)](https://github.com/Seldom-SE/seldom_pixel#license)
+[![Documentation](https://docs.rs/jigsaw_puzzle_generator/badge.svg)](https://docs.rs/jigsaw_puzzle_generator)
 
+# Jigsaw Puzzle Generator
+
+`jigsaw_puzzle_generator` is a simple helper to generate jigsaw puzzle in Rust.
+
+## Usage
+
+``` rust, no_run
 fn main() {
-    if env::var("RUST_LOG").is_err() {
-        env::set_var("RUST_LOG", "debug")
-    }
-    let env = Env::default();
-    Builder::from_env(env).format_timestamp_millis().init();
     let image_path = env::args().nth(1).unwrap_or("raw.jpg".to_string());
-    info!("Start to load {}", image_path);
     let img = image::open(image_path).expect("Failed to open image");
-    info!("load image successfully!");
+    // generate jigsaw puzzle 9 x 6
     let template = JigsawGenerator::new(img, 9, 6).generate();
     create_dir_all("images").expect("Failed to create images directory");
     template
@@ -28,3 +27,4 @@ fn main() {
             .expect("Failed to save image");
     }
 }
+```
