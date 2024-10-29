@@ -1,6 +1,6 @@
 [package]
 name = "jigsaw_puzzle_generator"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["FoxZoOL <zhooul@gmail.com>"]
 readme = "README.md"
 edition = "2021"
@@ -14,6 +14,7 @@ keywords = ["svg", "puzzle", "template", "game"]
 
 
 [dependencies]
+anyhow = "1.0.42"
 bezier-rs = "0.4.0"
 glam = "=0.24.2"
 image = { version = "0.25.4", features = ["rayon"] }

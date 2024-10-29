@@ -7,6 +7,7 @@
 //!     for a given total number of pieces
 //! - [`round`] is a util function which approximately rounds a f32 value to two decimal places
 
+use anyhow::{anyhow, Result};
 use bezier_rs::{Bezier, BezierHandles, Identifier, Subpath};
 use glam::DVec2;
 use image::{DynamicImage, GenericImageView, Rgba, RgbaImage};
@@ -15,6 +16,9 @@ use log::{debug, info};
 use rayon::iter::ParallelIterator;
 use std::f32;
 use std::vec;
+
+pub use image;
+pub use imageproc;
 
 const DEFAULT_TAB_SIZE: f32 = 20.0;
 const DEFAULT_JITTER: f32 = 5.0;
@@ -479,26 +483,26 @@ fn optimal_aspect_ratio(
     possible_dimensions: Vec<(usize, usize)>,
     image_width: f32,
     image_height: f32,
-) -> (usize, usize) {
+) -> Result<(usize, usize)> {
     let mut width_height_diff = f32::MAX;
     let mut number_of_pieces = *possible_dimensions
         .first()
-        .expect("No possible dimensions found. This error should never happen!");
+        .ok_or_else(|| anyhow!("No possible dimensions found"))?;
     for (x, y) in possible_dimensions {
         let width = image_width / x as f32;
         let height = image_height / y as f32;
         let new_width_height_diff = (width - height).abs();
         if new_width_height_diff < 1. {
-            return (x, y);
+            return Ok((x, y));
         }
         if width_height_diff >= new_width_height_diff {
             width_height_diff = new_width_height_diff;
             number_of_pieces = (x, y);
         } else {
-            return number_of_pieces;
+            return Ok(number_of_pieces);
         }
     }
-    number_of_pieces
+    Ok(number_of_pieces)
 }
 
 /// Returns the visually most appealing numbers of pieces in one column and one row based on a
@@ -507,7 +511,7 @@ pub fn generate_columns_rows_numbers(
     image_width: f32,
     image_height: f32,
     number_of_pieces: usize,
-) -> (usize, usize) {
+) -> Result<(usize, usize)> {
     let divisor_pairs = find_divisors(number_of_pieces);
     optimal_aspect_ratio(divisor_pairs, image_width, image_height)
 }
@@ -552,6 +556,30 @@ impl JigsawGenerator {
         }
     }
 
+    /// Creates a new `JigsawGenerator` instance from an image file at the given `image_path`
+    /// with a given number of pieces in a column and a row.
+    pub fn from_path(
+        image_path: &str,
+        pieces_in_column: usize,
+        pieces_in_row: usize,
+    ) -> Result<Self> {
+        let origin_image = image::open(image_path)?;
+        info!(
+            "loaded image from {} with dimensions {}x{}",
+            image_path,
+            origin_image.width(),
+            origin_image.height()
+        );
+        Ok(JigsawGenerator {
+            origin_image,
+            pieces_in_column,
+            pieces_in_row,
+            tab_size: None,
+            jitter: None,
+            seed: None,
+        })
+    }
+
     pub fn tab_size(mut self, tab_size: f32) -> Self {
         self.tab_size = Some(tab_size);
         self
@@ -567,10 +595,10 @@ impl JigsawGenerator {
         self
     }
 
-    pub fn generate(self) -> JigsawTemplate {
+    pub fn generate(self) -> Result<JigsawTemplate> {
         let scaled_image = scale_image(&self.origin_image);
         let (image_width, image_height) = scaled_image.dimensions();
-        debug!(
+        info!(
             "start processing image with {}x{}",
             image_width, image_height
         );
@@ -650,8 +678,6 @@ impl JigsawGenerator {
             }))
         }
 
-        info!("process edge end");
-
         let mut pieces = vec![];
         for i in 0..(pieces_in_column * pieces_in_row) {
             debug!("starting process piece {}", i);
@@ -663,7 +689,7 @@ impl JigsawGenerator {
                 vertical_edges[right_index].clone(),
                 horizontal_edges[bottom_index].clone(),
                 vertical_edges[left_index].clone(),
-            );
+            )?;
 
             debug!("calc beziers end {}", i);
 
@@ -675,12 +701,12 @@ impl JigsawGenerator {
             pieces.push(piece);
         }
 
-        JigsawTemplate {
+        Ok(JigsawTemplate {
             pieces,
             origin_image: scaled_image,
             piece_dimensions: (piece_width, piece_height),
             number_of_pieces: (pieces_in_column, pieces_in_row),
-        }
+        })
     }
 }
 
@@ -840,7 +866,7 @@ impl JigsawPiece {
         right_edge: Edge,
         bottom_edge: Edge,
         left_edge: Edge,
-    ) -> Self {
+    ) -> Result<Self> {
         let top_beziers = top_edge.to_beziers(false);
         let right_beziers = right_edge.to_beziers(false);
         let bottom_beziers = bottom_edge.to_beziers(true);
@@ -850,14 +876,16 @@ impl JigsawPiece {
             .flatten()
             .collect();
         let subpath: Subpath<PuzzleId> = Subpath::from_beziers(&beziers, true);
-        let [box_min, box_max] = subpath.bounding_box().expect("Failed to get bounding box");
+        let [box_min, box_max] = subpath
+            .bounding_box()
+            .ok_or(anyhow!("No bounding box found"))?;
 
-        JigsawPiece {
+        Ok(JigsawPiece {
             index,
             subpath,
             box_min,
             box_max,
-        }
+        })
     }
 
     /// Checks if a given point is inside the puzzle piece

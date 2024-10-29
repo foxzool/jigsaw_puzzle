@@ -12,9 +12,9 @@ Inspired by the [puzzle-paths](https://gitlab.switch.ch/ub-unibas/puzzle-app/puz
 ``` rust, no_run
 fn main() {
     let image_path = env::args().nth(1).unwrap_or("raw.jpg".to_string());
-    let img = image::open(image_path).expect("Failed to open image");
     // generate jigsaw puzzle 9 x 6
-    let template = JigsawGenerator::new(img, 9, 6).generate();
+    let image_path = env::args().nth(1).unwrap_or("raw.jpg".to_string());
+    let template = JigsawGenerator::from_path(&image_path, 9, 6).generate();
     create_dir_all("images").expect("Failed to create images directory");
     template
         .origin_image
