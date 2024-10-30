@@ -21,3 +21,8 @@ impl Plugin for PuzzlePlugin {
         app.add_plugins((ui::plugin, generator::plugin));
     }
 }
+
+#[derive(Debug, Component)]
+pub struct JigsawTile {
+    pub index: usize,
+}

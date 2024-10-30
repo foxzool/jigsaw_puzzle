@@ -607,9 +607,13 @@ impl JigsawGenerator {
         self.pieces_in_row
     }
 
-    pub fn generate(self) -> Result<JigsawTemplate> {
-        let scaled_image = scale_image(&self.origin_image);
-        let (image_width, image_height) = scaled_image.dimensions();
+    pub fn generate(&self, resize: bool) -> Result<JigsawTemplate> {
+        let target_image = if resize {
+            scale_image(&self.origin_image)
+        } else {
+            self.origin_image.clone()
+        };
+        let (image_width, image_height) = target_image.dimensions();
         info!(
             "start processing image with {}x{}",
             image_width, image_height
@@ -715,7 +719,7 @@ impl JigsawGenerator {
 
         Ok(JigsawTemplate {
             pieces,
-            origin_image: scaled_image,
+            origin_image: target_image,
             piece_dimensions: (piece_width, piece_height),
             number_of_pieces: (pieces_in_column, pieces_in_row),
         })
@@ -736,7 +740,7 @@ pub struct JigsawTemplate {
 
 impl JigsawTemplate {
     ///
-    pub fn crop(&self, piece: &JigsawPiece) -> RgbaImage {
+    pub fn crop(&self, piece: &JigsawPiece) -> DynamicImage {
         let (image_width, image_height) = self.origin_image.dimensions();
         let (piece_width, piece_height) = self.piece_dimensions;
         let piece_width_offset = (piece_width * 0.01) as f64;
@@ -782,9 +786,9 @@ impl JigsawTemplate {
             WHITE_COLOR,
         );
 
-        debug!("processing piece {}  end", piece.index);
+        debug!("processing piece {} end", piece.index);
 
-        piece_image
+        piece_image.into()
     }
 }
 
