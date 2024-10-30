@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 mod generator;
+mod ui;
 
 pub struct PuzzlePlugin;
 
@@ -17,6 +18,6 @@ impl Plugin for PuzzlePlugin {
             ..default()
         }));
 
-        app.add_plugins(generator::plugin);
+        app.add_plugins((ui::plugin, generator::plugin));
     }
 }

@@ -14,7 +14,6 @@ use image::{DynamicImage, GenericImageView, Rgba, RgbaImage};
 
 use log::{debug, info};
 use rayon::iter::ParallelIterator;
-use std::f32;
 use std::vec;
 
 pub use image;
@@ -529,6 +528,7 @@ pub fn generate_columns_rows_numbers(
 ///
 /// `seed` provides the initial "randomness" when creating the contours of the puzzle pieces. Same
 /// seed values for images with same dimensions and same number of pieces lead to same SVG paths.
+#[derive(Debug)]
 pub struct JigsawGenerator {
     /// The original image from which the jigsaw puzzle pieces will be generated.
     origin_image: DynamicImage,
@@ -710,12 +710,12 @@ impl JigsawGenerator {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct JigsawTemplate {
     /// The generated jigsaw puzzle pieces
     pub pieces: Vec<JigsawPiece>,
     /// The original image from which the jigsaw puzzle pieces will be generated.
-    pub origin_image: RgbaImage,
+    pub origin_image: DynamicImage,
     /// The dimensions (width, length) in pixel
     pub piece_dimensions: (f32, f32),
     /// The number of pieces in the x- and the y-axis
@@ -787,7 +787,7 @@ impl JigsawTemplate {
 /// # Returns
 ///
 /// * `RgbaImage` - The scaled image as an `RgbaImage`.
-fn scale_image(image: &DynamicImage) -> RgbaImage {
+fn scale_image(image: &DynamicImage) -> DynamicImage {
     let (width, height) = image.dimensions();
     let scale = if width > MAX_WIDTH || height > MAX_HEIGHT {
         let scale_x = MAX_WIDTH as f32 / width as f32;
@@ -797,15 +797,13 @@ fn scale_image(image: &DynamicImage) -> RgbaImage {
         1.0
     };
     if scale < 1.0 {
-        image
-            .resize(
-                (width as f32 * scale) as u32,
-                (height as f32 * scale) as u32,
-                image::imageops::FilterType::Lanczos3,
-            )
-            .to_rgba8()
+        image.resize(
+            (width as f32 * scale) as u32,
+            (height as f32 * scale) as u32,
+            image::imageops::FilterType::Lanczos3,
+        )
     } else {
-        image.to_rgba8()
+        image.clone()
     }
 }
 
@@ -851,7 +849,7 @@ fn draw_bezier(
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct JigsawPiece {
     pub index: usize,
     pub subpath: Subpath<PuzzleId>,
@@ -990,7 +988,7 @@ mod tests {
         let possible_aspect_ratios = vec![(1, 25), (5, 5), (25, 1)];
         assert_eq!(
             optimal_aspect_ratio(possible_aspect_ratios, image_width, image_height),
-            (5, 5)
+            Ok((5, 5))
         );
 
         let image_width: f32 = 666.;
@@ -1007,7 +1005,7 @@ mod tests {
         ];
         assert_eq!(
             optimal_aspect_ratio(possible_aspect_ratios, image_width, image_height),
-            (6, 4)
+            Ok((6, 4))
         );
     }
 }
