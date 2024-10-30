@@ -595,6 +595,18 @@ impl JigsawGenerator {
         self
     }
 
+    pub fn origin_image(&self) -> &DynamicImage {
+        &self.origin_image
+    }
+
+    pub fn pieces_in_column(&self) -> usize {
+        self.pieces_in_column
+    }
+
+    pub fn pieces_in_row(&self) -> usize {
+        self.pieces_in_row
+    }
+
     pub fn generate(self) -> Result<JigsawTemplate> {
         let scaled_image = scale_image(&self.origin_image);
         let (image_width, image_height) = scaled_image.dimensions();

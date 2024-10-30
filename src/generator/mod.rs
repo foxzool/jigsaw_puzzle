@@ -1,7 +1,7 @@
 use crate::ui::BoardBackgroundImage;
 use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
-use jigsaw_puzzle_generator::{JigsawGenerator, JigsawTemplate};
+use jigsaw_puzzle_generator::JigsawGenerator;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(Startup, setup_generator);
@@ -9,30 +9,25 @@ pub(super) fn plugin(app: &mut App) {
 
 fn setup_generator(mut commands: Commands, asset_server: Res<AssetServer>) {
     let image_path = "raw.jpg";
-    let template = JigsawGenerator::from_path(image_path, 9, 6)
-        .expect("Failed to load image")
-        .generate()
-        .expect("Failed to generate puzzle");
+    let generator = JigsawGenerator::from_path(image_path, 9, 6).expect("Failed to load image");
 
     // load image from dynamic image
     let image = asset_server.add(Image::from_dynamic(
-        template.origin_image.clone(),
+        generator.origin_image().clone(),
         true,
         RenderAssetUsages::RENDER_WORLD,
     ));
 
     commands.spawn((Sprite::from_image(image), BoardBackgroundImage));
-
-    commands.insert_resource(JigsawPuzzleGenerator {
-        template,
-        generated_piece: 0,
-    });
+    commands.insert_resource(JigsawPuzzleGenerator(generator));
 }
 
-#[derive(Debug, Resource)]
-pub struct JigsawPuzzleGenerator {
-    /// The jigsaw generator template
-    pub template: JigsawTemplate,
-    /// The number of pieces that have been generated
-    pub generated_piece: usize,
+#[derive(Debug, Resource, Deref, DerefMut)]
+pub struct JigsawPuzzleGenerator(pub JigsawGenerator);
+
+fn spawn_piece(
+    mut commands: Commands,
+    generator: Res<JigsawPuzzleGenerator>,
+    asset_server: Res<AssetServer>,
+) {
 }
