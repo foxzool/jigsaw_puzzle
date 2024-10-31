@@ -3,9 +3,11 @@ use crate::JigsawTile;
 use bevy::asset::RenderAssetUsages;
 use bevy::ecs::world::CommandQueue;
 use bevy::prelude::*;
+use bevy::sprite::Anchor;
 use bevy::tasks::futures_lite::future;
 use bevy::tasks::{block_on, AsyncComputeTaskPool, Task};
-use jigsaw_puzzle_generator::JigsawGenerator;
+use jigsaw_puzzle_generator::image::GenericImageView;
+use jigsaw_puzzle_generator::{JigsawGenerator, JigsawPiece};
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(Startup, setup_generator).add_systems(
@@ -44,10 +46,16 @@ fn spawn_piece(mut commands: Commands, generator: Res<JigsawPuzzleGenerator>) {
         for piece in template.pieces.iter() {
             let template_clone = template.clone();
             let piece_clone = piece.clone();
-            let entity = commands.spawn(JigsawTile { index: piece.index }).id();
+            let calc_position = calc_position(&piece, template.origin_image.dimensions());
+            let entity = commands
+                .spawn((
+                    JigsawTile { index: piece.index },
+                    Transform::from_xyz(calc_position.0, calc_position.1, 1.0),
+                ))
+                .id();
 
             let task = thread_pool.spawn(async move {
-                let cropped_image = template_clone.crop(&piece_clone);
+                let cropped_image = piece_clone.crop(&template_clone.origin_image);
                 let mut command_queue = CommandQueue::default();
 
                 command_queue.push(move |world: &mut World| {
@@ -57,10 +65,12 @@ fn spawn_piece(mut commands: Commands, generator: Res<JigsawPuzzleGenerator>) {
                         true,
                         RenderAssetUsages::RENDER_WORLD,
                     ));
-                    world
-                        .entity_mut(entity)
-                        .insert(Sprite::from_image(image))
-                        .remove::<CropTask>();
+                    let sprite = Sprite {
+                        image,
+                        anchor: Anchor::TopLeft,
+                        ..default()
+                    };
+                    world.entity_mut(entity).insert(sprite).remove::<CropTask>();
                 });
 
                 command_queue
@@ -69,6 +79,16 @@ fn spawn_piece(mut commands: Commands, generator: Res<JigsawPuzzleGenerator>) {
             commands.entity(entity).insert(CropTask(task));
         }
     };
+}
+
+fn calc_position(piece: &JigsawPiece, origin_image_size: (u32, u32)) -> (f32, f32) {
+    let (width, height) = origin_image_size;
+    let image_top_left = (width as f32 / -2.0, height as f32 / 2.0);
+
+    let x = piece.top_left_x as f32;
+    let y = piece.top_left_y as f32;
+
+    (image_top_left.0 + x, image_top_left.1 - y)
 }
 
 fn handle_tasks(mut commands: Commands, mut crop_tasks: Query<&mut CropTask>) {

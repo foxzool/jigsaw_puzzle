@@ -25,7 +25,7 @@ fn adjust_camera_on_added_sprite(
         let window_width = window.resolution.width();
         let image_width = generator.origin_image().width() as f32;
         let scale = image_width / window_width;
-        let target_scale = scale / 0.8;
+        let target_scale = scale / 0.6;
         camera_2d.scale = target_scale;
         commands.entity(entity).insert(Visibility::Hidden);
     }

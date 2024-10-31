@@ -21,8 +21,8 @@ fn main() {
         .expect("Failed to save image");
 
     for piece in template.pieces.iter() {
-        template
-            .crop(piece)
+        piece
+            .crop(&template.origin_image)
             .save(format!("images/puzzle_piece_{}.png", piece.index))
             .expect("Failed to save image");
     }

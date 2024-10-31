@@ -613,13 +613,13 @@ impl JigsawGenerator {
         } else {
             self.origin_image.clone()
         };
-        let (image_width, image_height) = target_image.dimensions();
+        let (target_image_width, target_image_height) = target_image.dimensions();
         info!(
             "start processing image with {}x{}",
-            image_width, image_height
+            target_image_width, target_image_height
         );
-        let image_width = image_width as f32;
-        let image_height = image_height as f32;
+        let image_width = target_image_width as f32;
+        let image_height = target_image_height as f32;
         let pieces_in_column = self.pieces_in_column;
         let pieces_in_row = self.pieces_in_row;
         let (starting_points_x, piece_width) = divide_axis(image_width, pieces_in_column);
@@ -701,6 +701,8 @@ impl JigsawGenerator {
                 get_border_indices(i, pieces_in_column);
             let piece = JigsawPiece::new(
                 i,
+                target_image.dimensions(),
+                (piece_width, piece_height),
                 horizontal_edges[top_index].clone(),
                 vertical_edges[right_index].clone(),
                 horizontal_edges[bottom_index].clone(),
@@ -738,60 +740,6 @@ pub struct JigsawTemplate {
     pub number_of_pieces: (usize, usize),
 }
 
-impl JigsawTemplate {
-    ///
-    pub fn crop(&self, piece: &JigsawPiece) -> DynamicImage {
-        let (image_width, image_height) = self.origin_image.dimensions();
-        let (piece_width, piece_height) = self.piece_dimensions;
-        let piece_width_offset = (piece_width * 0.01) as f64;
-        let piece_height_offset = (piece_height * 0.01) as f64;
-        let box_min = piece.box_min;
-        let box_max = piece.box_max;
-        let top_left_x = (box_min.x - piece_width_offset).max(0.0);
-        let top_left_y = (box_min.y - piece_height_offset).max(0.0);
-        let mut width = (box_max.x - box_min.x + 2.0 * piece_width_offset).max(piece_width as f64);
-        let mut height =
-            (box_max.y - box_min.y + 2.0 * piece_height_offset).max(piece_height as f64);
-        if top_left_x + width > image_width as f64 {
-            width = image_width as f64 - top_left_x + 1.0;
-        }
-        if top_left_y + height > image_height as f64 {
-            height = (image_height as f64 - top_left_y) + 1.0;
-        }
-
-        let mut piece_image = self
-            .origin_image
-            .view(
-                top_left_x as u32,
-                top_left_y as u32,
-                width as u32,
-                height as u32,
-            )
-            .to_image();
-
-        piece_image
-            .par_enumerate_pixels_mut()
-            .for_each(|(x, y, pixel)| {
-                let point = DVec2::new(top_left_x + x as f64, top_left_y + y as f64);
-                if !piece.contains(point) {
-                    *pixel = Rgba([0, 0, 0, 0])
-                }
-            });
-
-        draw_bezier(
-            &mut piece_image,
-            top_left_x,
-            top_left_y,
-            &piece.subpath,
-            WHITE_COLOR,
-        );
-
-        debug!("processing piece {} end", piece.index);
-
-        piece_image.into()
-    }
-}
-
 /// Scales the given image to fit within the maximum width and height constraints.
 /// If the image dimensions exceed the maximum allowed dimensions, it scales the image down
 /// while maintaining the aspect ratio. Otherwise, it returns the original image.
@@ -823,59 +771,23 @@ fn scale_image(image: &DynamicImage) -> DynamicImage {
     }
 }
 
-fn draw_bezier(
-    image: &mut RgbaImage,
-    top_left_x: f64,
-    top_left_y: f64,
-    sub_path: &Subpath<PuzzleId>,
-    color: Rgba<u8>,
-) {
-    for path in sub_path.iter() {
-        match path.handles {
-            BezierHandles::Linear => {
-                let start = (path.start.x - top_left_x, path.start.y - top_left_y);
-                let end = (path.end.x - top_left_x, path.end.y - top_left_y);
-                imageproc::drawing::draw_line_segment_mut(
-                    image,
-                    (start.0 as f32, start.1 as f32),
-                    (end.0 as f32, end.1 as f32),
-                    color,
-                );
-            }
-            BezierHandles::Quadratic { .. } => {}
-            BezierHandles::Cubic {
-                handle_start,
-                handle_end,
-            } => {
-                let start = (path.start.x - top_left_x, path.start.y - top_left_y);
-                let end = (path.end.x - top_left_x, path.end.y - top_left_y);
-                let handle_start = (handle_start.x - top_left_x, handle_start.y - top_left_y);
-                let handle_end = (handle_end.x - top_left_x, handle_end.y - top_left_y);
-
-                imageproc::drawing::draw_cubic_bezier_curve_mut(
-                    image,
-                    (start.0 as f32, start.1 as f32),
-                    (end.0 as f32, end.1 as f32),
-                    (handle_start.0 as f32, handle_start.1 as f32),
-                    (handle_end.0 as f32, handle_end.1 as f32),
-                    color,
-                );
-            }
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct JigsawPiece {
     pub index: usize,
     pub subpath: Subpath<PuzzleId>,
-    pub box_min: DVec2,
-    pub box_max: DVec2,
+    pub width: f32,
+    pub height: f32,
+    pub top_left_x: u32,
+    pub top_left_y: u32,
+    pub crop_width: u32,
+    pub crop_height: u32,
 }
 
 impl JigsawPiece {
     pub fn new(
         index: usize,
+        origin_image_size: (u32, u32),
+        piece_size: (f32, f32),
         top_edge: Edge,
         right_edge: Edge,
         bottom_edge: Edge,
@@ -894,12 +806,101 @@ impl JigsawPiece {
             .bounding_box()
             .ok_or(anyhow!("No bounding box found"))?;
 
+        let (image_width, image_height) = (origin_image_size.0, origin_image_size.1);
+        let (piece_width, piece_height) = (piece_size.0, piece_size.1);
+        let piece_width_offset = piece_width * 0.01;
+        let piece_height_offset = piece_height * 0.01;
+        let top_left_x = (box_min.x as f32 - piece_width_offset).max(0.0) as u32;
+        let top_left_y = (box_min.y as f32 - piece_height_offset).max(0.0) as u32;
+        let mut crop_width = (box_max.x as f32 - box_min.x as f32 + 2.0 * piece_width_offset)
+            .max(piece_width) as u32;
+        let mut crop_height = (box_max.y as f32 - box_min.y as f32 + 2.0 * piece_height_offset)
+            .max(piece_height) as u32;
+        if top_left_x + crop_width > image_width {
+            crop_width = image_width - top_left_x;
+        }
+        if top_left_y + crop_height > image_height {
+            crop_height = image_height - top_left_y;
+        }
+
         Ok(JigsawPiece {
             index,
             subpath,
-            box_min,
-            box_max,
+            width: piece_width,
+            height: piece_height,
+            top_left_x,
+            top_left_y,
+            crop_width,
+            crop_height,
         })
+    }
+
+    pub fn crop(&self, image: &DynamicImage) -> DynamicImage {
+        debug!("start crop piece {} image", self.index);
+        let mut piece_image = image
+            .view(
+                self.top_left_x,
+                self.top_left_y,
+                self.crop_width,
+                self.crop_height,
+            )
+            .to_image();
+
+        piece_image
+            .par_enumerate_pixels_mut()
+            .for_each(|(x, y, pixel)| {
+                let point = DVec2::new(
+                    self.top_left_x as f64 + x as f64,
+                    self.top_left_y as f64 + y as f64,
+                );
+                if !self.contains(point) {
+                    *pixel = Rgba([0, 0, 0, 0])
+                }
+            });
+
+        self.draw_bezier(&mut piece_image, WHITE_COLOR);
+
+        piece_image.into()
+    }
+
+    fn draw_bezier(&self, image: &mut RgbaImage, color: Rgba<u8>) {
+        let top_left_x = self.top_left_x as f64;
+        let top_left_y = self.top_left_y as f64;
+        let top_left = DVec2::new(top_left_x, top_left_y);
+        for path in self.subpath.iter() {
+            match path.handles {
+                BezierHandles::Linear => {
+                    let start = path.start - top_left - 1.0;
+                    let end = path.end - top_left - 1.0;
+
+                    imageproc::drawing::draw_line_segment_mut(
+                        image,
+                        (start.x.max(0.0) as f32, start.y.max(0.0) as f32),
+                        (end.x.max(0.0) as f32, end.y.max(0.0) as f32),
+                        color,
+                    );
+                }
+                BezierHandles::Quadratic { .. } => {}
+                BezierHandles::Cubic {
+                    handle_start,
+                    handle_end,
+                } => {
+                    let start = (path.start.x - top_left_x, path.start.y - top_left_y);
+                    let end = (path.end.x - top_left_x, path.end.y - top_left_y);
+                    let handle_start = (handle_start.x - top_left_x, handle_start.y - top_left_y);
+                    let handle_end = (handle_end.x - top_left_x, handle_end.y - top_left_y);
+
+                    imageproc::drawing::draw_cubic_bezier_curve_mut(
+                        image,
+                        (start.0 as f32, start.1 as f32),
+                        (end.0 as f32, end.1 as f32),
+                        (handle_start.0 as f32, handle_start.1 as f32),
+                        (handle_end.0 as f32, handle_end.1 as f32),
+                        color,
+                    );
+                }
+            }
+        }
     }
 
     /// Checks if a given point is inside the puzzle piece
