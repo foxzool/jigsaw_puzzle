@@ -13,6 +13,7 @@ members = [
 [dependencies]
 bevy = { version = "0.15.0-rc.2", features = ["wayland"] }
 jigsaw_puzzle_generator = { path = "jigsaw_puzzle_generator" }
+rand = "0.8.5"
 
 [dev-dependencies]
 

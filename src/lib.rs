@@ -13,6 +13,7 @@ impl Plugin for PuzzlePlugin {
                 canvas: Some("#bevy".to_string()),
                 fit_canvas_to_parent: true,
                 prevent_default_event_handling: true,
+                // resolution: WindowResolution::new(800., 600.),
                 ..Default::default()
             }),
             ..default()
