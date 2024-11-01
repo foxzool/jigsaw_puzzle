@@ -1,29 +1,32 @@
 use bevy::prelude::*;
+use jigsaw_puzzle_generator::JigsawPiece;
 
-mod generator;
+mod gameplay;
 mod ui;
 
 pub struct PuzzlePlugin;
 
 impl Plugin for PuzzlePlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Jigsaw Puzzle Game".to_string(),
-                canvas: Some("#bevy".to_string()),
-                fit_canvas_to_parent: true,
-                prevent_default_event_handling: true,
-                // resolution: WindowResolution::new(800., 600.),
-                ..Default::default()
-            }),
-            ..default()
-        }));
+        app.add_plugins(
+            DefaultPlugins
+                .set(ImagePlugin::default_nearest())
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "Jigsaw Puzzle Game".to_string(),
+                        canvas: Some("#bevy".to_string()),
+                        fit_canvas_to_parent: true,
+                        prevent_default_event_handling: true,
+                        // resolution: WindowResolution::new(800., 600.),
+                        ..Default::default()
+                    }),
+                    ..default()
+                }),
+        );
 
-        app.add_plugins((ui::plugin, generator::plugin));
+        app.add_plugins((ui::plugin, gameplay::plugin));
     }
 }
 
-#[derive(Debug, Component)]
-pub struct JigsawTile {
-    pub index: usize,
-}
+#[derive(Debug, Component, Deref, DerefMut)]
+pub struct Piece(pub JigsawPiece);

@@ -1,5 +1,5 @@
 use crate::ui::BoardBackgroundImage;
-use crate::JigsawTile;
+use crate::Piece;
 use bevy::asset::RenderAssetUsages;
 use bevy::ecs::world::CommandQueue;
 use bevy::prelude::*;
@@ -56,9 +56,10 @@ fn spawn_piece(
             let calc_position = random_position(&piece, resolution.size(), camera.scale);
             let entity = commands
                 .spawn((
-                    JigsawTile { index: piece.index },
-                    Transform::from_xyz(calc_position.x, calc_position.y, 1.0),
+                    Piece(piece.clone()),
+                    Transform::from_xyz(calc_position.x, calc_position.y, piece.index as f32),
                 ))
+                .observe(on_click_piece)
                 .id();
 
             let task = thread_pool.spawn(async move {
@@ -66,8 +67,8 @@ fn spawn_piece(
                 let mut command_queue = CommandQueue::default();
 
                 command_queue.push(move |world: &mut World| {
-                    let asset_server = world.resource::<AssetServer>();
-                    let image = asset_server.add(Image::from_dynamic(
+                    let mut assets = world.resource_mut::<Assets<Image>>();
+                    let image = assets.add(Image::from_dynamic(
                         cropped_image,
                         true,
                         RenderAssetUsages::RENDER_WORLD,
@@ -75,6 +76,10 @@ fn spawn_piece(
                     let sprite = Sprite {
                         image,
                         anchor: Anchor::TopLeft,
+                        custom_size: Some(Vec2::new(
+                            piece_clone.crop_width as f32,
+                            piece_clone.crop_height as f32,
+                        )),
                         ..default()
                     };
                     world.entity_mut(entity).insert(sprite).remove::<CropTask>();
@@ -119,6 +124,24 @@ fn handle_tasks(mut commands: Commands, mut crop_tasks: Query<&mut CropTask>) {
     for mut task in &mut crop_tasks {
         if let Some(mut commands_queue) = block_on(future::poll_once(&mut task.0)) {
             commands.append(&mut commands_queue);
+        }
+    }
+}
+
+#[derive(Component)]
+struct Moveable;
+
+fn on_click_piece(
+    trigger: Trigger<Pointer<Click>>,
+    tile: Query<(&Piece, Option<&Moveable>)>,
+    mut commands: Commands,
+) {
+    if let Ok((tile, opt_moveable)) = tile.get(trigger.entity()) {
+        debug!("Mouse click on tile: {}", tile.index);
+        if opt_moveable.is_some() {
+            commands.entity(trigger.entity()).remove::<Moveable>();
+        } else {
+            commands.entity(trigger.entity()).insert(Moveable);
         }
     }
 }
