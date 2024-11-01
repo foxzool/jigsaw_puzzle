@@ -6,17 +6,20 @@ use bevy::prelude::*;
 use bevy::sprite::Anchor;
 use bevy::tasks::futures_lite::future;
 use bevy::tasks::{block_on, AsyncComputeTaskPool, Task};
+use jigsaw_puzzle_generator::imageproc::drawing::Canvas;
 use jigsaw_puzzle_generator::{JigsawGenerator, JigsawPiece};
 use rand::Rng;
 
 pub(super) fn plugin(app: &mut App) {
-    app.add_systems(Startup, setup_generator).add_systems(
-        PostUpdate,
-        (
-            spawn_piece.run_if(resource_changed::<JigsawPuzzleGenerator>),
-            handle_tasks,
-        ),
-    );
+    app.add_systems(Startup, setup_generator)
+        .add_systems(
+            PostUpdate,
+            (
+                spawn_piece.run_if(resource_changed::<JigsawPuzzleGenerator>),
+                handle_tasks,
+            ),
+        )
+        .add_systems(Update, move_piece);
 }
 
 fn setup_generator(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -53,7 +56,8 @@ fn spawn_piece(
             let template_clone = template.clone();
             let piece_clone = piece.clone();
             let resolution = &window.resolution;
-            let calc_position = random_position(&piece, resolution.size(), camera.scale);
+            // let calc_position = random_position(&piece, resolution.size(), camera.scale);
+            let calc_position = calc_position(&piece, template.origin_image.dimensions());
             let entity = commands
                 .spawn((
                     Piece(piece.clone()),
@@ -95,14 +99,14 @@ fn spawn_piece(
 
 /// Calculate the position of the piece in the world space
 #[allow(dead_code)]
-fn calc_position(piece: &JigsawPiece, origin_image_size: (u32, u32)) -> (f32, f32) {
+fn calc_position(piece: &JigsawPiece, origin_image_size: (u32, u32)) -> Vec2 {
     let (width, height) = origin_image_size;
     let image_top_left = (width as f32 / -2.0, height as f32 / 2.0);
 
     let x = piece.top_left_x as f32;
     let y = piece.top_left_y as f32;
 
-    (image_top_left.0 + x, image_top_left.1 - y)
+    Vec2::new(image_top_left.0 + x, image_top_left.1 - y)
 }
 
 /// Calculate a random position for the piece
@@ -133,15 +137,69 @@ struct Moveable;
 
 fn on_click_piece(
     trigger: Trigger<Pointer<Click>>,
-    tile: Query<(&Piece, Option<&Moveable>)>,
+    mut image: Query<((&Piece, &mut Sprite, &Transform), Option<&Moveable>)>,
+    camera: Single<(&Camera, &OrthographicProjection, &GlobalTransform), With<Camera2d>>,
     mut commands: Commands,
 ) {
-    if let Ok((tile, opt_moveable)) = tile.get(trigger.entity()) {
-        debug!("Mouse click on tile: {}", tile.index);
+    if let Ok((((piece, mut image, transform)), opt_moveable)) = image.get_mut(trigger.entity()) {
+        let click_position = trigger.event().pointer_location.position;
+        let image_position = transform.translation.xy();
+        let (camera, projection, camera_global_transform) = camera.into_inner();
+        // let viewport_position = camera
+        //     .world_to_viewport(camera_global_transform, image_position)
+        //     .unwrap();
+
+        let pointer_position = camera
+            .viewport_to_world_2d(camera_global_transform, click_position)
+            .unwrap();
+
+        let anchor = calc_custom_anchor(pointer_position, image_position, piece, projection.scale);
+        println!(
+            "Mouse click on tile: {} location: {:?} image: {:?} anchor: {:?}",
+            piece.index, pointer_position, image_position, anchor
+        );
+        // debug!(
+        //     "Mouse click on tile: {} location: {:?} target {:?} {:?} ",
+        //     piece.index,
+        //     click_position,
+        //     trigger.event().pointer_location.target,
+        //     anchor
+        // );
         if opt_moveable.is_some() {
+            // image.anchor = Anchor::Custom(anchor);
             commands.entity(trigger.entity()).remove::<Moveable>();
         } else {
+            // image.anchor = Anchor::Custom(-anchor);
             commands.entity(trigger.entity()).insert(Moveable);
         }
     }
+}
+
+fn move_piece(
+    window: Single<&Window>,
+    camera_query: Single<(&Camera, &GlobalTransform)>,
+    mut moveable: Query<&mut Transform, With<Moveable>>,
+) {
+    let (camera, camera_transform) = *camera_query;
+    let Some(cursor_position) = window.cursor_position() else {
+        return;
+    };
+    let Ok(point) = camera.viewport_to_world_2d(camera_transform, cursor_position) else {
+        return;
+    };
+
+    for mut transform in moveable.iter_mut() {
+        transform.translation = point.extend(transform.translation.z);
+    }
+}
+
+fn calc_custom_anchor(point_loc: Vec2, image_top_left: Vec2, piece: &Piece, scale: f32) -> Vec2 {
+    let image_bottom_right = Vec2::new(
+        image_top_left.x + piece.crop_width as f32 * scale,
+        image_top_left.y - piece.crop_height as f32 * scale,
+    );
+    let x = (point_loc.x - image_top_left.x) / (image_bottom_right.x - image_top_left.x) - 0.5;
+    let y = (point_loc.y - image_top_left.y) / (image_bottom_right.y - image_top_left.y) - 0.5;
+
+    Vec2::new(x, y)
 }
