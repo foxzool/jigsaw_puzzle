@@ -6,7 +6,6 @@ use bevy::prelude::*;
 use bevy::sprite::Anchor;
 use bevy::tasks::futures_lite::future;
 use bevy::tasks::{block_on, AsyncComputeTaskPool, Task};
-use jigsaw_puzzle_generator::imageproc::drawing::Canvas;
 use jigsaw_puzzle_generator::{JigsawGenerator, JigsawPiece};
 use rand::Rng;
 
@@ -19,7 +18,7 @@ pub(super) fn plugin(app: &mut App) {
                 handle_tasks,
             ),
         )
-        .add_systems(Update, move_piece);
+        .add_systems(Update, (move_piece,));
 }
 
 fn setup_generator(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -44,14 +43,21 @@ pub struct JigsawPuzzleGenerator(pub JigsawGenerator);
 struct CropTask(Task<CommandQueue>);
 
 /// Spawn the pieces of the jigsaw puzzle
-fn spawn_piece(mut commands: Commands, generator: Res<JigsawPuzzleGenerator>) {
+fn spawn_piece(
+    mut commands: Commands,
+    generator: Res<JigsawPuzzleGenerator>,
+    window: Single<&Window>,
+    camera: Single<&OrthographicProjection, With<Camera2d>>,
+) {
     if let Ok(template) = generator.generate(false) {
         let thread_pool = AsyncComputeTaskPool::get();
         for piece in template.pieces.iter() {
             let template_clone = template.clone();
             let piece_clone = piece.clone();
 
-            let calc_position = calc_position(piece, template.origin_image.dimensions());
+            let resolution = &window.resolution;
+            let calc_position = random_position(&piece, resolution.size(), camera.scale);
+            // let calc_position = calc_position(piece, template.origin_image.dimensions());
             let entity = commands
                 .spawn((
                     Piece(piece.clone()),
