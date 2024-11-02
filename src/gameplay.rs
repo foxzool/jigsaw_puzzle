@@ -44,20 +44,14 @@ pub struct JigsawPuzzleGenerator(pub JigsawGenerator);
 struct CropTask(Task<CommandQueue>);
 
 /// Spawn the pieces of the jigsaw puzzle
-fn spawn_piece(
-    mut commands: Commands,
-    generator: Res<JigsawPuzzleGenerator>,
-    window: Single<&Window>,
-    camera: Single<&OrthographicProjection, With<Camera2d>>,
-) {
+fn spawn_piece(mut commands: Commands, generator: Res<JigsawPuzzleGenerator>) {
     if let Ok(template) = generator.generate(false) {
         let thread_pool = AsyncComputeTaskPool::get();
         for piece in template.pieces.iter() {
             let template_clone = template.clone();
             let piece_clone = piece.clone();
-            let resolution = &window.resolution;
-            // let calc_position = random_position(&piece, resolution.size(), camera.scale);
-            let calc_position = calc_position(&piece, template.origin_image.dimensions());
+
+            let calc_position = calc_position(piece, template.origin_image.dimensions());
             let entity = commands
                 .spawn((
                     Piece(piece.clone()),
@@ -110,6 +104,7 @@ fn calc_position(piece: &JigsawPiece, origin_image_size: (u32, u32)) -> Vec2 {
 }
 
 /// Calculate a random position for the piece
+#[allow(dead_code)]
 fn random_position(piece: &JigsawPiece, window_size: Vec2, scale: f32) -> Vec2 {
     let window_width = window_size.x / 2.0 * scale;
     let window_height = window_size.y / 2.0 * scale;
@@ -133,44 +128,34 @@ fn handle_tasks(mut commands: Commands, mut crop_tasks: Query<&mut CropTask>) {
 }
 
 #[derive(Component)]
-struct Moveable;
+struct MoveStart {
+    image_position: Transform,
+    click_position: Vec2,
+}
 
 fn on_click_piece(
     trigger: Trigger<Pointer<Click>>,
-    mut image: Query<((&Piece, &mut Sprite, &Transform), Option<&Moveable>)>,
-    camera: Single<(&Camera, &OrthographicProjection, &GlobalTransform), With<Camera2d>>,
+    mut image: Query<(&mut Transform, Option<&MoveStart>)>,
+    camera: Single<(&Camera, &GlobalTransform), With<Camera2d>>,
     mut commands: Commands,
 ) {
-    if let Ok((((piece, mut image, transform)), opt_moveable)) = image.get_mut(trigger.entity()) {
+    if let Ok((mut transform, opt_moveable)) = image.get_mut(trigger.entity()) {
         let click_position = trigger.event().pointer_location.position;
-        let image_position = transform.translation.xy();
-        let (camera, projection, camera_global_transform) = camera.into_inner();
-        // let viewport_position = camera
-        //     .world_to_viewport(camera_global_transform, image_position)
-        //     .unwrap();
+        let (camera, camera_global_transform) = camera.into_inner();
 
-        let pointer_position = camera
+        let point = camera
             .viewport_to_world_2d(camera_global_transform, click_position)
             .unwrap();
 
-        let anchor = calc_custom_anchor(pointer_position, image_position, piece, projection.scale);
-        println!(
-            "Mouse click on tile: {} location: {:?} image: {:?} anchor: {:?}",
-            piece.index, pointer_position, image_position, anchor
-        );
-        // debug!(
-        //     "Mouse click on tile: {} location: {:?} target {:?} {:?} ",
-        //     piece.index,
-        //     click_position,
-        //     trigger.event().pointer_location.target,
-        //     anchor
-        // );
         if opt_moveable.is_some() {
-            // image.anchor = Anchor::Custom(anchor);
-            commands.entity(trigger.entity()).remove::<Moveable>();
+            transform.translation.z = 0.0;
+            commands.entity(trigger.entity()).remove::<MoveStart>();
         } else {
-            // image.anchor = Anchor::Custom(-anchor);
-            commands.entity(trigger.entity()).insert(Moveable);
+            transform.translation.z = 1.0;
+            commands.entity(trigger.entity()).insert(MoveStart {
+                image_position: *transform,
+                click_position: point,
+            });
         }
     }
 }
@@ -178,7 +163,7 @@ fn on_click_piece(
 fn move_piece(
     window: Single<&Window>,
     camera_query: Single<(&Camera, &GlobalTransform)>,
-    mut moveable: Query<&mut Transform, With<Moveable>>,
+    mut moveable: Query<(&mut Transform, &MoveStart)>,
 ) {
     let (camera, camera_transform) = *camera_query;
     let Some(cursor_position) = window.cursor_position() else {
@@ -188,18 +173,8 @@ fn move_piece(
         return;
     };
 
-    for mut transform in moveable.iter_mut() {
-        transform.translation = point.extend(transform.translation.z);
+    for (mut transform, move_start) in moveable.iter_mut() {
+        let cursor_move = point - move_start.click_position;
+        transform.translation = move_start.image_position.translation + cursor_move.extend(0.0);
     }
-}
-
-fn calc_custom_anchor(point_loc: Vec2, image_top_left: Vec2, piece: &Piece, scale: f32) -> Vec2 {
-    let image_bottom_right = Vec2::new(
-        image_top_left.x + piece.crop_width as f32 * scale,
-        image_top_left.y - piece.crop_height as f32 * scale,
-    );
-    let x = (point_loc.x - image_top_left.x) / (image_bottom_right.x - image_top_left.x) - 0.5;
-    let y = (point_loc.y - image_top_left.y) / (image_bottom_right.y - image_top_left.y) - 0.5;
-
-    Vec2::new(x, y)
 }
