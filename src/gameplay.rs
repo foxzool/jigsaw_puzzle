@@ -6,6 +6,7 @@ use bevy::prelude::*;
 use bevy::sprite::Anchor;
 use bevy::tasks::futures_lite::future;
 use bevy::tasks::{block_on, AsyncComputeTaskPool, Task};
+use jigsaw_puzzle_generator::image::GenericImageView;
 use jigsaw_puzzle_generator::{JigsawGenerator, JigsawPiece};
 use rand::Rng;
 
@@ -56,8 +57,8 @@ fn spawn_piece(
             let piece_clone = piece.clone();
 
             let resolution = &window.resolution;
-            let calc_position = random_position(&piece, resolution.size(), camera.scale);
-            // let calc_position = calc_position(piece, template.origin_image.dimensions());
+            // let calc_position = random_position(&piece, resolution.size(), camera.scale);
+            let calc_position = calc_position(piece, template.origin_image.dimensions());
             let entity = commands
                 .spawn((
                     Piece(piece.clone()),
@@ -169,7 +170,8 @@ fn on_click_piece(
 fn move_piece(
     window: Single<&Window>,
     camera_query: Single<(&Camera, &GlobalTransform)>,
-    mut moveable: Query<(&mut Transform, &MoveStart)>,
+    mut moveable: Query<(&Piece, &mut Transform, &MoveStart)>,
+    query: Query<(&Piece, &Transform), Without<MoveStart>>,
 ) {
     let (camera, camera_transform) = *camera_query;
     let Some(cursor_position) = window.cursor_position() else {
@@ -179,8 +181,39 @@ fn move_piece(
         return;
     };
 
-    for (mut transform, move_start) in moveable.iter_mut() {
+    for (move_piece, mut transform, move_start) in moveable.iter_mut() {
         let cursor_move = point - move_start.click_position;
-        transform.translation = move_start.image_position.translation + cursor_move.extend(0.0);
+        let move_end = move_start.image_position.translation + cursor_move.extend(0.0);
+
+        for (piece, other_transform) in query.iter() {
+            if close_to(
+                transform.translation.xy(),
+                other_transform.translation.xy(),
+                move_piece.crop_width as f32,
+                move_piece.crop_height as f32,
+            ) {
+                info!("close to");
+                if move_piece.on_the_left(piece) {
+                    println!("on the left");
+                }
+                if move_piece.on_the_right(piece) {
+                    println!("on the right");
+                }
+                if move_piece.on_the_top(piece) {
+                    println!("on the top");
+                }
+                if move_piece.on_the_bottom(piece) {
+                    println!("on the bottom");
+                }
+            }
+        }
+
+        transform.translation = move_end;
     }
+}
+
+fn close_to(t1: Vec2, t2: Vec2, width: f32, height: f32) -> bool {
+    let x = (t1.x - t2.x).abs();
+    let y = (t1.y - t2.y).abs();
+    x < width && y < height
 }

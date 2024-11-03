@@ -696,11 +696,15 @@ impl JigsawGenerator {
 
         let mut pieces = vec![];
         for i in 0..(pieces_in_column * pieces_in_row) {
-            debug!("starting process piece {}", i);
+            let row = i / pieces_in_column;
+            let column = i % pieces_in_row;
+            debug!("starting process piece {} {} {}", i, column, row);
             let (top_index, right_index, bottom_index, left_index) =
                 get_border_indices(i, pieces_in_column);
             let piece = JigsawPiece::new(
                 i,
+                row,
+                column,
                 target_image.dimensions(),
                 (piece_width, piece_height),
                 horizontal_edges[top_index].clone(),
@@ -774,6 +778,8 @@ fn scale_image(image: &DynamicImage) -> DynamicImage {
 #[derive(Debug, Clone)]
 pub struct JigsawPiece {
     pub index: usize,
+    pub row: usize,
+    pub column: usize,
     pub subpath: Subpath<PuzzleId>,
     pub width: f32,
     pub height: f32,
@@ -786,6 +792,8 @@ pub struct JigsawPiece {
 impl JigsawPiece {
     pub fn new(
         index: usize,
+        row: usize,
+        column: usize,
         origin_image_size: (u32, u32),
         piece_size: (f32, f32),
         top_edge: Edge,
@@ -825,6 +833,8 @@ impl JigsawPiece {
 
         Ok(JigsawPiece {
             index,
+            row,
+            column,
             subpath,
             width: piece_width,
             height: piece_height,
@@ -901,6 +911,27 @@ impl JigsawPiece {
                 }
             }
         }
+    }
+
+    pub fn close_to(&self, x: f32, y: f32) -> bool {
+        (x - self.top_left_x as f32 - self.crop_width as f32).abs() < 5.0
+            || (y - self.top_left_y as f32 - self.crop_height as f32).abs() < 5.0
+    }
+
+    pub fn on_the_left(&self, other: &JigsawPiece) -> bool {
+        self.row == other.row && other.column == self.column + 1
+    }
+
+    pub fn on_the_right(&self, other: &JigsawPiece) -> bool {
+        self.row == other.row && self.column == other.column + 1
+    }
+
+    pub fn on_the_top(&self, other: &JigsawPiece) -> bool {
+        self.column == other.column && self.row == other.row + 1
+    }
+
+    pub fn on_the_bottom(&self, other: &JigsawPiece) -> bool {
+        self.row == other.row && other.column == self.column + 1
     }
 
     /// Checks if a given point is inside the puzzle piece
