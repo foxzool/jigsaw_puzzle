@@ -607,6 +607,10 @@ impl JigsawGenerator {
         self.pieces_in_row
     }
 
+    pub fn pieces_count(&self) -> usize {
+        self.pieces_in_column * self.pieces_in_row
+    }
+
     pub fn generate(&self, resize: bool) -> Result<JigsawTemplate> {
         let target_image = if resize {
             scale_image(&self.origin_image)
@@ -923,16 +927,76 @@ impl JigsawPiece {
         }
     }
 
+    pub fn is_on_the_left_side(
+        &self,
+        other: &JigsawPiece,
+        self_loc: (f32, f32),
+        other_loc: (f32, f32),
+    ) -> bool {
+        if (self_loc.0 + self.width - other_loc.0).abs() < COMPARE_THRESHOLD
+            && (self_loc.1 - other_loc.1).abs() < COMPARE_THRESHOLD
+        {
+            self.on_the_left_side(other)
+        } else {
+            false
+        }
+    }
+
     pub fn on_the_left_side(&self, other: &JigsawPiece) -> bool {
         self.right_edge == other.left_edge
+    }
+
+    pub fn is_on_the_right_side(
+        &self,
+        other: &JigsawPiece,
+        self_loc: (f32, f32),
+        other_loc: (f32, f32),
+    ) -> bool {
+        if (other_loc.0 + other.width - self_loc.0).abs() < COMPARE_THRESHOLD
+            && (self_loc.1 - other_loc.1).abs() < COMPARE_THRESHOLD
+        {
+            self.on_the_right_side(other)
+        } else {
+            false
+        }
     }
 
     pub fn on_the_right_side(&self, other: &JigsawPiece) -> bool {
         self.left_edge == other.right_edge
     }
 
+    pub fn is_on_the_top_side(
+        &self,
+        other: &JigsawPiece,
+        self_loc: (f32, f32),
+        other_loc: (f32, f32),
+    ) -> bool {
+        if (other_loc.1 + other.height - self_loc.1).abs() < COMPARE_THRESHOLD
+            && (self_loc.0 - other_loc.0).abs() < COMPARE_THRESHOLD
+        {
+            self.on_the_top_side(other)
+        } else {
+            false
+        }
+    }
+
     pub fn on_the_top_side(&self, other: &JigsawPiece) -> bool {
         self.bottom_edge == other.top_edge
+    }
+
+    pub fn is_on_the_bottom_side(
+        &self,
+        other: &JigsawPiece,
+        self_loc: (f32, f32),
+        other_loc: (f32, f32),
+    ) -> bool {
+        if (other_loc.1 - other.height - self_loc.1).abs() < COMPARE_THRESHOLD
+            && (self_loc.0 - other_loc.0).abs() < COMPARE_THRESHOLD
+        {
+            self.on_the_bottom_side(other)
+        } else {
+            false
+        }
     }
 
     pub fn on_the_bottom_side(&self, other: &JigsawPiece) -> bool {
@@ -981,6 +1045,8 @@ impl JigsawPiece {
         }
     }
 }
+
+const COMPARE_THRESHOLD: f32 = 10.0;
 
 #[derive(Clone, PartialEq, Hash, Eq, Debug)]
 pub struct PuzzleId(u64);

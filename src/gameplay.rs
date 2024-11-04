@@ -6,6 +6,7 @@ use bevy::prelude::*;
 use bevy::sprite::Anchor;
 use bevy::tasks::futures_lite::future;
 use bevy::tasks::{block_on, AsyncComputeTaskPool, Task};
+use bevy::utils::HashSet;
 use jigsaw_puzzle_generator::{JigsawGenerator, JigsawPiece};
 use rand::Rng;
 
@@ -18,7 +19,8 @@ pub(super) fn plugin(app: &mut App) {
                 handle_tasks,
             ),
         )
-        .add_systems(Update, (move_piece,));
+        .add_systems(Update, (move_piece,))
+        .add_observer(combine_together);
 }
 
 fn setup_generator(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -59,17 +61,12 @@ fn spawn_piece(
             // let calc_position = init_position(piece, template.origin_image.dimensions());
             let entity = commands
                 .spawn((
-                    Sprite {
-                        // color: Color::WHITE,
-                        color: Color::srgba_u8(0, 0, 0, 0),
-                        anchor: Anchor::TopLeft,
-                        custom_size: Some(Vec2::new(piece.width, piece.height)),
-                        ..default()
-                    },
                     Piece(piece.clone()),
+                    MoveTogether::default(),
                     Transform::from_xyz(calc_position.x, calc_position.y, -1.0),
                 ))
                 .observe(on_click_piece)
+                .observe(on_move_end)
                 .id();
 
             let task = thread_pool.spawn(async move {
@@ -98,7 +95,7 @@ fn spawn_piece(
                             Transform::from_xyz(
                                 -piece_clone.calc_offset().0,
                                 piece_clone.calc_offset().1,
-                                1.0,
+                                piece_clone.index as f32,
                             ),
                         ))
                         .id();
@@ -183,6 +180,7 @@ fn on_click_piece(
         if opt_moveable.is_some() {
             transform.translation.z = 0.0;
             commands.entity(trigger.entity()).remove::<MoveStart>();
+            commands.trigger_targets(MoveEnd, vec![trigger.entity()]);
         } else {
             transform.translation.z = 1.0;
             commands.entity(trigger.entity()).insert(MoveStart {
@@ -196,8 +194,8 @@ fn on_click_piece(
 fn move_piece(
     window: Single<&Window>,
     camera_query: Single<(&Camera, &GlobalTransform)>,
-    mut moveable: Query<(&Piece, &mut Transform, &MoveStart)>,
-    query: Query<(&Piece, &Transform), Without<MoveStart>>,
+    moveable: Single<(&mut Transform, &MoveStart, &MoveTogether)>,
+    mut other_piece: Query<&mut Transform, Without<MoveStart>>,
 ) {
     let (camera, camera_transform) = *camera_query;
     let Some(cursor_position) = window.cursor_position() else {
@@ -207,27 +205,108 @@ fn move_piece(
         return;
     };
 
-    for (move_piece, mut transform, move_start) in moveable.iter_mut() {
-        let cursor_move = point - move_start.click_position;
-        let move_end = move_start.image_position.translation + cursor_move.extend(0.0);
+    let (mut transform, move_start, move_together) = moveable.into_inner();
+    let cursor_move = point - move_start.click_position;
+    let move_end = move_start.image_position.translation + cursor_move.extend(0.0);
+    let offset = move_end - transform.translation;
+    transform.translation = move_end;
 
-        for (piece, other_transform) in query.iter() {
-            if close_to(
-                piece,
-                other_transform.translation.truncate(),
-                move_end.truncate(),
-            ) {
-                if move_piece.left_edge == piece.right_edge {
-                    println!("close {} {}", piece.index, move_piece.index);
-                }
-            }
+    for other in move_together.iter() {
+        if let Ok(mut other_transform) = other_piece.get_mut(*other) {
+            other_transform.translation += offset;
         }
-
-        transform.translation = move_end;
     }
 }
 
-fn close_to(p1: &Piece, p1_loc: Vec2, p2_loc: Vec2) -> bool {
-    (p1_loc.x + p1.width as f32 - p2_loc.x).abs() < 5.0
-        || (p1_loc.y + p1.height as f32 - p2_loc.y).abs() < 5.0
+#[derive(Event)]
+struct MoveEnd;
+
+#[derive(Component, Deref, DerefMut, Default)]
+struct MoveTogether(HashSet<Entity>);
+
+fn on_move_end(
+    trigger: Trigger<MoveEnd>,
+    generator: Res<JigsawPuzzleGenerator>,
+    mut query: Query<(Entity, &Piece, &mut Transform, &mut MoveTogether)>,
+    mut commands: Commands,
+) {
+    let mut iter = query.iter_combinations_mut();
+    let end_entity = trigger.entity();
+
+    let mut all_entities = HashSet::default();
+    while let Some([(e1, p1, transform1, together1), (e2, p2, transform2, together2)]) =
+        iter.fetch_next()
+    {
+        let (mut target_transform, compare_transform, target, compare) = if e1 == end_entity {
+            (transform1, transform2, p1, p2)
+        } else if e2 == end_entity {
+            (transform2, transform1, p2, p1)
+        } else {
+            continue;
+        };
+
+        let target_loc = (
+            target_transform.translation.x,
+            target_transform.translation.y,
+        );
+        let compare_loc = (
+            compare_transform.translation.x,
+            compare_transform.translation.y,
+        );
+
+        let mut has_snapped = false;
+
+        if target.is_on_the_left_side(compare, target_loc, compare_loc) {
+            debug!("{} on the left side {}", target.index, compare.index);
+            target_transform.translation.x = compare_transform.translation.x - target.width;
+            target_transform.translation.y = compare_transform.translation.y;
+            has_snapped = true;
+        }
+
+        if target.is_on_the_right_side(compare, target_loc, compare_loc) {
+            debug!("{} on the right side {}", target.index, compare.index);
+            target_transform.translation.x = compare_transform.translation.x + compare.width;
+            target_transform.translation.y = compare_transform.translation.y;
+            has_snapped = true;
+        }
+
+        if target.is_on_the_top_side(compare, target_loc, compare_loc) {
+            debug!("{} on the top side {}", target.index, compare.index);
+            target_transform.translation.x = compare_transform.translation.x;
+            target_transform.translation.y = compare_transform.translation.y + target.height;
+            has_snapped = true;
+        }
+
+        if target.is_on_the_bottom_side(compare, target_loc, compare_loc) {
+            debug!("{} on the bottom side {}", target.index, compare.index);
+            target_transform.translation.x = compare_transform.translation.x;
+            target_transform.translation.y = compare_transform.translation.y - compare.height;
+            has_snapped = true;
+        }
+
+        if has_snapped {
+            let mut merged_set: HashSet<_> = together1.union(&together2).cloned().collect();
+            merged_set.insert(e1);
+            merged_set.insert(e2);
+
+            all_entities.extend(merged_set);
+        }
+    }
+
+    if all_entities.len() == generator.pieces_count() {
+        debug!("All pieces have been merged");
+    }
+
+    commands.trigger(CombineTogether(all_entities));
+}
+
+#[derive(Event)]
+struct CombineTogether(HashSet<Entity>);
+
+fn combine_together(trigger: Trigger<CombineTogether>, mut query: Query<&mut MoveTogether>) {
+    let entities: Vec<Entity> = trigger.event().0.iter().cloned().collect();
+    let mut together_iter = query.iter_many_mut(&entities);
+    while let Some(mut move_together) = together_iter.fetch_next() {
+        move_together.0 = trigger.event().0.clone();
+    }
 }
