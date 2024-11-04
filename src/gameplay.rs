@@ -47,8 +47,8 @@ struct CropTask(Task<CommandQueue>);
 fn spawn_piece(
     mut commands: Commands,
     generator: Res<JigsawPuzzleGenerator>,
-    window: Single<&Window>,
-    camera: Single<&OrthographicProjection, With<Camera2d>>,
+    // window: Single<&Window>,
+    // camera: Single<&OrthographicProjection, With<Camera2d>>,
 ) {
     if let Ok(template) = generator.generate(false) {
         let thread_pool = AsyncComputeTaskPool::get();
@@ -56,7 +56,7 @@ fn spawn_piece(
             let template_clone = template.clone();
             let piece_clone = piece.clone();
 
-            let resolution = &window.resolution;
+            // let resolution = &window.resolution;
             // let calc_position = random_position(&piece, resolution.size(), camera.scale);
             let calc_position = calc_position(piece, template.origin_image.dimensions());
             let entity = commands
@@ -186,24 +186,25 @@ fn move_piece(
         let move_end = move_start.image_position.translation + cursor_move.extend(0.0);
 
         for (piece, other_transform) in query.iter() {
+            if piece.index == 0 {
+                println!(
+                    "{} {} {}",
+                    piece.index,
+                    move_piece.index,
+                    other_transform
+                        .translation
+                        .truncate()
+                        .distance(move_end.truncate())
+                );
+            }
+
             if close_to(
-                transform.translation.xy(),
-                other_transform.translation.xy(),
-                move_piece.crop_width as f32,
-                move_piece.crop_height as f32,
+                piece,
+                other_transform.translation.truncate(),
+                move_end.truncate(),
             ) {
-                info!("close to");
-                if move_piece.on_the_left(piece) {
-                    println!("on the left");
-                }
-                if move_piece.on_the_right(piece) {
-                    println!("on the right");
-                }
-                if move_piece.on_the_top(piece) {
-                    println!("on the top");
-                }
-                if move_piece.on_the_bottom(piece) {
-                    println!("on the bottom");
+                if move_piece.left_edge == piece.right_edge {
+                    println!("close {} {}", piece.index, move_piece.index);
                 }
             }
         }
@@ -212,8 +213,7 @@ fn move_piece(
     }
 }
 
-fn close_to(t1: Vec2, t2: Vec2, width: f32, height: f32) -> bool {
-    let x = (t1.x - t2.x).abs();
-    let y = (t1.y - t2.y).abs();
-    x < width && y < height
+fn close_to(p1: &Piece, p1_loc: Vec2, p2_loc: Vec2) -> bool {
+    (p1_loc.x + p1.crop_width as f32 - p2_loc.x).abs() < 1.0
+        && (p1_loc.y + p1.crop_height as f32 - p2_loc.y).abs() < 1.0
 }

@@ -28,7 +28,7 @@ const MAX_HEIGHT: u32 = 1200;
 /// A segment of an indented puzzle piece edge. A segment is described by a cubic Bézier curve,
 /// which includes a starting point, an end point and two control points. Three segments make up a
 /// piece's edge.
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct IndentationSegment {
     /// Starting point of the segment
     pub starting_point: (f32, f32),
@@ -68,7 +68,7 @@ impl IndentationSegment {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 /// An indented puzzle piece edge. An edge is decribe via three distinct cubic Bézier curves (the
 /// "segments")
 pub struct IndentedEdge {
@@ -99,7 +99,7 @@ impl IndentedEdge {
         generator.create(starting_point, end_point)
     }
 
-    pub fn to_beziers(self, reverse: bool) -> Vec<Bezier> {
+    pub fn to_beziers(&self, reverse: bool) -> Vec<Bezier> {
         if reverse {
             vec![
                 self.last_segment.to_bezier(reverse),
@@ -369,7 +369,7 @@ impl EdgeContourGenerator {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 /// A puzzle piece edge which is at the same time a part of the puzzle's border and therefore forms
 /// a straight line
 pub struct StraightEdge {
@@ -397,7 +397,7 @@ impl StraightEdge {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 /// A border of a puzzle piece. Can be either an `StraightEdge` (no adjacent other piece) or an
 /// `IndentedEdge`
 pub enum Edge {
@@ -406,7 +406,7 @@ pub enum Edge {
 }
 
 impl Edge {
-    pub fn to_beziers(self, reverse: bool) -> Vec<Bezier> {
+    pub fn to_beziers(&self, reverse: bool) -> Vec<Bezier> {
         match self {
             Edge::IndentedEdge(ie) => ie.to_beziers(reverse),
             Edge::StraightEdge(oe) => oe.to_beziers(reverse),
@@ -695,32 +695,31 @@ impl JigsawGenerator {
         }
 
         let mut pieces = vec![];
-        for i in 0..(pieces_in_column * pieces_in_row) {
-            let row = i / pieces_in_column;
-            let column = i % pieces_in_row;
-            debug!("starting process piece {} {} {}", i, column, row);
-            let (top_index, right_index, bottom_index, left_index) =
-                get_border_indices(i, pieces_in_column);
-            let piece = JigsawPiece::new(
-                i,
-                row,
-                column,
-                target_image.dimensions(),
-                (piece_width, piece_height),
-                horizontal_edges[top_index].clone(),
-                vertical_edges[right_index].clone(),
-                horizontal_edges[bottom_index].clone(),
-                vertical_edges[left_index].clone(),
-            )?;
+        let mut i = 0;
+        for y in starting_points_y.iter() {
+            for x in starting_points_x.iter() {
+                debug!("starting process piece {i}");
+                let (top_index, right_index, bottom_index, left_index) =
+                    get_border_indices(i, pieces_in_column);
+                let piece = JigsawPiece::new(
+                    i,
+                    (*x, *y),
+                    target_image.dimensions(),
+                    (piece_width, piece_height),
+                    horizontal_edges[top_index].clone(),
+                    vertical_edges[right_index].clone(),
+                    horizontal_edges[bottom_index].clone(),
+                    vertical_edges[left_index].clone(),
+                )?;
 
-            debug!("calc beziers end {}", i);
+                debug!("calc beziers end {}", i);
 
-            // draw debug line
-            // piece.draw_debug_line(&mut scaled_image);
+                // draw debug line
+                // piece.draw_debug_line(&mut scaled_image);
 
-            // piece.image = piece_image;
-
-            pieces.push(piece);
+                pieces.push(piece);
+                i += 1;
+            }
         }
 
         Ok(JigsawTemplate {
@@ -778,8 +777,7 @@ fn scale_image(image: &DynamicImage) -> DynamicImage {
 #[derive(Debug, Clone)]
 pub struct JigsawPiece {
     pub index: usize,
-    pub row: usize,
-    pub column: usize,
+    pub start_point: (f32, f32),
     pub subpath: Subpath<PuzzleId>,
     pub width: f32,
     pub height: f32,
@@ -787,13 +785,16 @@ pub struct JigsawPiece {
     pub top_left_y: u32,
     pub crop_width: u32,
     pub crop_height: u32,
+    pub top_edge: Edge,
+    pub right_edge: Edge,
+    pub bottom_edge: Edge,
+    pub left_edge: Edge,
 }
 
 impl JigsawPiece {
     pub fn new(
         index: usize,
-        row: usize,
-        column: usize,
+        start_point: (f32, f32),
         origin_image_size: (u32, u32),
         piece_size: (f32, f32),
         top_edge: Edge,
@@ -833,8 +834,7 @@ impl JigsawPiece {
 
         Ok(JigsawPiece {
             index,
-            row,
-            column,
+            start_point,
             subpath,
             width: piece_width,
             height: piece_height,
@@ -842,6 +842,10 @@ impl JigsawPiece {
             top_left_y,
             crop_width,
             crop_height,
+            top_edge,
+            right_edge,
+            bottom_edge,
+            left_edge,
         })
     }
 
@@ -913,25 +917,20 @@ impl JigsawPiece {
         }
     }
 
-    pub fn close_to(&self, x: f32, y: f32) -> bool {
-        (x - self.top_left_x as f32 - self.crop_width as f32).abs() < 5.0
-            || (y - self.top_left_y as f32 - self.crop_height as f32).abs() < 5.0
+    pub fn on_the_left_side(&self, other: &JigsawPiece) -> bool {
+        self.right_edge == other.left_edge
     }
 
-    pub fn on_the_left(&self, other: &JigsawPiece) -> bool {
-        self.row == other.row && other.column == self.column + 1
+    pub fn on_the_right_side(&self, other: &JigsawPiece) -> bool {
+        self.left_edge == other.right_edge
     }
 
-    pub fn on_the_right(&self, other: &JigsawPiece) -> bool {
-        self.row == other.row && self.column == other.column + 1
+    pub fn on_the_top_side(&self, other: &JigsawPiece) -> bool {
+        self.bottom_edge == other.top_edge
     }
 
-    pub fn on_the_top(&self, other: &JigsawPiece) -> bool {
-        self.column == other.column && self.row == other.row + 1
-    }
-
-    pub fn on_the_bottom(&self, other: &JigsawPiece) -> bool {
-        self.row == other.row && other.column == self.column + 1
+    pub fn on_the_bottom_side(&self, other: &JigsawPiece) -> bool {
+        self.top_edge == other.bottom_edge
     }
 
     /// Checks if a given point is inside the puzzle piece
