@@ -849,6 +849,12 @@ impl JigsawPiece {
         })
     }
 
+    pub fn calc_offset(&self) -> (f32, f32) {
+        let x = self.start_point.0 - self.top_left_x as f32;
+        let y = self.start_point.1 - self.top_left_y as f32;
+        (x, y)
+    }
+
     pub fn crop(&self, image: &DynamicImage) -> DynamicImage {
         debug!("start crop piece {} image", self.index);
         let mut piece_image = image

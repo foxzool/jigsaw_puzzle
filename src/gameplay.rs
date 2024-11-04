@@ -6,7 +6,6 @@ use bevy::prelude::*;
 use bevy::sprite::Anchor;
 use bevy::tasks::futures_lite::future;
 use bevy::tasks::{block_on, AsyncComputeTaskPool, Task};
-use jigsaw_puzzle_generator::image::GenericImageView;
 use jigsaw_puzzle_generator::{JigsawGenerator, JigsawPiece};
 use rand::Rng;
 
@@ -47,8 +46,8 @@ struct CropTask(Task<CommandQueue>);
 fn spawn_piece(
     mut commands: Commands,
     generator: Res<JigsawPuzzleGenerator>,
-    // window: Single<&Window>,
-    // camera: Single<&OrthographicProjection, With<Camera2d>>,
+    window: Single<&Window>,
+    camera: Single<&OrthographicProjection, With<Camera2d>>,
 ) {
     if let Ok(template) = generator.generate(false) {
         let thread_pool = AsyncComputeTaskPool::get();
@@ -56,20 +55,26 @@ fn spawn_piece(
             let template_clone = template.clone();
             let piece_clone = piece.clone();
 
-            // let resolution = &window.resolution;
-            // let calc_position = random_position(&piece, resolution.size(), camera.scale);
-            let calc_position = calc_position(piece, template.origin_image.dimensions());
+            let calc_position = random_position(&piece, window.resolution.size(), camera.scale);
+            // let calc_position = init_position(piece, template.origin_image.dimensions());
             let entity = commands
                 .spawn((
+                    Sprite {
+                        // color: Color::WHITE,
+                        color: Color::srgba_u8(0, 0, 0, 0),
+                        anchor: Anchor::TopLeft,
+                        custom_size: Some(Vec2::new(piece.width, piece.height)),
+                        ..default()
+                    },
                     Piece(piece.clone()),
-                    Transform::from_xyz(calc_position.x, calc_position.y, piece.index as f32),
+                    Transform::from_xyz(calc_position.x, calc_position.y, -1.0),
                 ))
                 .observe(on_click_piece)
                 .id();
 
             let task = thread_pool.spawn(async move {
-                let cropped_image = piece_clone.crop(&template_clone.origin_image);
                 let mut command_queue = CommandQueue::default();
+                let cropped_image = piece_clone.crop(&template_clone.origin_image);
 
                 command_queue.push(move |world: &mut World| {
                     let mut assets = world.resource_mut::<Assets<Image>>();
@@ -87,7 +92,17 @@ fn spawn_piece(
                         )),
                         ..default()
                     };
-                    world.entity_mut(entity).insert(sprite).remove::<CropTask>();
+                    let id = world
+                        .spawn((
+                            sprite,
+                            Transform::from_xyz(
+                                -piece_clone.calc_offset().0,
+                                piece_clone.calc_offset().1,
+                                1.0,
+                            ),
+                        ))
+                        .id();
+                    world.entity_mut(entity).add_child(id).remove::<CropTask>();
                 });
 
                 command_queue
@@ -108,6 +123,16 @@ fn calc_position(piece: &JigsawPiece, origin_image_size: (u32, u32)) -> Vec2 {
     let y = piece.top_left_y as f32;
 
     Vec2::new(image_top_left.0 + x, image_top_left.1 - y)
+}
+
+#[allow(dead_code)]
+fn init_position(piece: &JigsawPiece, origin_image_size: (u32, u32)) -> Vec2 {
+    let (width, height) = origin_image_size;
+    let image_top_left = (width as f32 / -2.0, height as f32 / 2.0);
+    Vec2::new(
+        image_top_left.0 + piece.start_point.0,
+        image_top_left.1 - piece.start_point.1,
+    )
 }
 
 /// Calculate a random position for the piece
@@ -154,6 +179,7 @@ fn on_click_piece(
             .viewport_to_world_2d(camera_global_transform, click_position)
             .unwrap();
 
+        // move end
         if opt_moveable.is_some() {
             transform.translation.z = 0.0;
             commands.entity(trigger.entity()).remove::<MoveStart>();
@@ -186,18 +212,6 @@ fn move_piece(
         let move_end = move_start.image_position.translation + cursor_move.extend(0.0);
 
         for (piece, other_transform) in query.iter() {
-            if piece.index == 0 {
-                println!(
-                    "{} {} {}",
-                    piece.index,
-                    move_piece.index,
-                    other_transform
-                        .translation
-                        .truncate()
-                        .distance(move_end.truncate())
-                );
-            }
-
             if close_to(
                 piece,
                 other_transform.translation.truncate(),
@@ -214,6 +228,6 @@ fn move_piece(
 }
 
 fn close_to(p1: &Piece, p1_loc: Vec2, p2_loc: Vec2) -> bool {
-    (p1_loc.x + p1.crop_width as f32 - p2_loc.x).abs() < 1.0
-        && (p1_loc.y + p1.crop_height as f32 - p2_loc.y).abs() < 1.0
+    (p1_loc.x + p1.width as f32 - p2_loc.x).abs() < 5.0
+        || (p1_loc.y + p1.height as f32 - p2_loc.y).abs() < 5.0
 }
