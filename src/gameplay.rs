@@ -8,6 +8,7 @@ use bevy::tasks::futures_lite::future;
 use bevy::tasks::{block_on, AsyncComputeTaskPool, Task};
 use bevy::utils::HashSet;
 use jigsaw_puzzle_generator::{JigsawGenerator, JigsawPiece};
+use log::debug;
 use rand::Rng;
 
 pub(super) fn plugin(app: &mut App) {
@@ -19,7 +20,7 @@ pub(super) fn plugin(app: &mut App) {
                 handle_tasks,
             ),
         )
-        .add_systems(Update, (move_piece,))
+        .add_systems(Update, (move_piece, cancel_all_move))
         .add_observer(combine_together);
 }
 
@@ -67,6 +68,8 @@ fn spawn_piece(
                 ))
                 .observe(on_click_piece)
                 .observe(on_move_end)
+                .observe(on_drag_start)
+                .observe(on_drag_end)
                 .id();
 
             let task = thread_pool.spawn(async move {
@@ -162,6 +165,38 @@ struct MoveStart {
     click_position: Vec2,
 }
 
+fn on_drag_start(
+    trigger: Trigger<Pointer<DragStart>>,
+    mut image: Query<&mut Transform, With<Piece>>,
+    camera: Single<(&Camera, &GlobalTransform), With<Camera2d>>,
+    mut commands: Commands,
+) {
+    if let Ok(mut transform) = image.get_mut(trigger.entity()) {
+        let click_position = trigger.event().pointer_location.position;
+        let (camera, camera_global_transform) = camera.into_inner();
+        let point = camera
+            .viewport_to_world_2d(camera_global_transform, click_position)
+            .unwrap();
+        transform.translation.z = 1.0;
+        commands.entity(trigger.entity()).insert(MoveStart {
+            image_position: *transform,
+            click_position: point,
+        });
+    }
+}
+
+fn on_drag_end(
+    trigger: Trigger<Pointer<DragEnd>>,
+    mut image: Query<&mut Transform, With<MoveStart>>,
+    mut commands: Commands,
+) {
+    if let Ok(mut transform) = image.get_mut(trigger.entity()) {
+        transform.translation.z = 0.0;
+        commands.entity(trigger.entity()).remove::<MoveStart>();
+        commands.trigger_targets(MoveEnd, vec![trigger.entity()]);
+    }
+}
+
 fn on_click_piece(
     trigger: Trigger<Pointer<Click>>,
     mut image: Query<(&mut Transform, Option<&MoveStart>)>,
@@ -171,7 +206,6 @@ fn on_click_piece(
     if let Ok((mut transform, opt_moveable)) = image.get_mut(trigger.entity()) {
         let click_position = trigger.event().pointer_location.position;
         let (camera, camera_global_transform) = camera.into_inner();
-
         let point = camera
             .viewport_to_world_2d(camera_global_transform, click_position)
             .unwrap();
@@ -308,5 +342,17 @@ fn combine_together(trigger: Trigger<CombineTogether>, mut query: Query<&mut Mov
     let mut together_iter = query.iter_many_mut(&entities);
     while let Some(mut move_together) = together_iter.fetch_next() {
         move_together.0 = trigger.event().0.clone();
+    }
+}
+
+fn cancel_all_move(
+    key: Res<ButtonInput<KeyCode>>,
+    query: Query<Entity, With<MoveStart>>,
+    mut commands: Commands,
+) {
+    if key.just_pressed(KeyCode::Escape) {
+        for entity in query.iter() {
+            commands.entity(entity).remove::<MoveStart>();
+        }
     }
 }
