@@ -3,7 +3,7 @@ use bevy::prelude::*;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(Startup, setup)
-        .add_systems(Update, adjust_camera_on_added_sprite);
+        .add_systems(Update, (adjust_camera_on_added_sprite,));
 }
 
 fn setup(mut commands: Commands) {

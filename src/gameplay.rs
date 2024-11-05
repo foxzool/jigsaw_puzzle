@@ -1,6 +1,7 @@
 use crate::ui::BoardBackgroundImage;
 use crate::Piece;
 use bevy::asset::RenderAssetUsages;
+use bevy::color::palettes::basic::{GRAY, OLIVE, YELLOW};
 use bevy::ecs::world::CommandQueue;
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
@@ -13,6 +14,7 @@ use rand::Rng;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(Startup, setup_generator)
+        .add_systems(Update, (move_piece, cancel_all_move))
         .add_systems(
             PostUpdate,
             (
@@ -20,7 +22,6 @@ pub(super) fn plugin(app: &mut App) {
                 handle_tasks,
             ),
         )
-        .add_systems(Update, (move_piece, cancel_all_move))
         .add_observer(combine_together);
 }
 
@@ -44,6 +45,12 @@ pub struct JigsawPuzzleGenerator(pub JigsawGenerator);
 
 #[derive(Component)]
 struct CropTask(Task<CommandQueue>);
+
+#[derive(Component)]
+struct WhiteImage;
+
+#[derive(Component)]
+struct ColorImage;
 
 /// Spawn the pieces of the jigsaw puzzle
 fn spawn_piece(
@@ -70,11 +77,16 @@ fn spawn_piece(
                 .observe(on_move_end)
                 .observe(on_drag_start)
                 .observe(on_drag_end)
+                .observe(on_add_move_start)
+                .observe(on_remove_move_start)
+                .observe(on_selected)
+                .observe(on_not_selected)
                 .id();
 
             let task = thread_pool.spawn(async move {
                 let mut command_queue = CommandQueue::default();
                 let cropped_image = piece_clone.crop(&template_clone.origin_image);
+                let white_image = piece_clone.fill_white(&cropped_image);
 
                 command_queue.push(move |world: &mut World| {
                     let mut assets = world.resource_mut::<Assets<Image>>();
@@ -83,7 +95,12 @@ fn spawn_piece(
                         true,
                         RenderAssetUsages::RENDER_WORLD,
                     ));
-                    let sprite = Sprite {
+                    let white_image = assets.add(Image::from_dynamic(
+                        white_image,
+                        true,
+                        RenderAssetUsages::RENDER_WORLD,
+                    ));
+                    let color_sprite = Sprite {
                         image,
                         anchor: Anchor::TopLeft,
                         custom_size: Some(Vec2::new(
@@ -92,9 +109,11 @@ fn spawn_piece(
                         )),
                         ..default()
                     };
-                    let id = world
+
+                    let color_id = world
                         .spawn((
-                            sprite,
+                            ColorImage,
+                            color_sprite,
                             Transform::from_xyz(
                                 -piece_clone.calc_offset().0,
                                 piece_clone.calc_offset().1,
@@ -102,7 +121,31 @@ fn spawn_piece(
                             ),
                         ))
                         .id();
-                    world.entity_mut(entity).add_child(id).remove::<CropTask>();
+                    let white_sprite = Sprite {
+                        image: white_image,
+                        anchor: Anchor::TopLeft,
+                        custom_size: Some(Vec2::new(
+                            piece_clone.crop_width as f32,
+                            piece_clone.crop_height as f32,
+                        )),
+                        ..default()
+                    };
+                    let white_id = world
+                        .spawn((
+                            WhiteImage,
+                            white_sprite,
+                            Transform::from_xyz(
+                                -piece_clone.calc_offset().0,
+                                piece_clone.calc_offset().1,
+                                -1.0,
+                            ),
+                        ))
+                        .id();
+
+                    world
+                        .entity_mut(entity)
+                        .add_children(&[color_id, white_id])
+                        .remove::<CropTask>();
                 });
 
                 command_queue
@@ -167,11 +210,11 @@ struct MoveStart {
 
 fn on_drag_start(
     trigger: Trigger<Pointer<DragStart>>,
-    mut image: Query<&mut Transform, With<Piece>>,
+    mut piece: Query<&mut Transform, With<Piece>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera2d>>,
     mut commands: Commands,
 ) {
-    if let Ok(mut transform) = image.get_mut(trigger.entity()) {
+    if let Ok(mut transform) = piece.get_mut(trigger.entity()) {
         let click_position = trigger.event().pointer_location.position;
         let (camera, camera_global_transform) = camera.into_inner();
         let point = camera
@@ -187,7 +230,7 @@ fn on_drag_start(
 
 fn on_drag_end(
     trigger: Trigger<Pointer<DragEnd>>,
-    mut image: Query<&mut Transform, With<MoveStart>>,
+    mut image: Query<&mut Transform, (With<MoveStart>, With<Piece>)>,
     mut commands: Commands,
 ) {
     if let Ok(mut transform) = image.get_mut(trigger.entity()) {
@@ -199,7 +242,7 @@ fn on_drag_end(
 
 fn on_click_piece(
     trigger: Trigger<Pointer<Click>>,
-    mut image: Query<(&mut Transform, Option<&MoveStart>)>,
+    mut image: Query<(&mut Transform, Option<&MoveStart>), With<Piece>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera2d>>,
     mut commands: Commands,
 ) {
@@ -342,7 +385,6 @@ fn on_move_end(
     }
 
     if let Ok((_e, _p, mut transform, _together)) = query.get_mut(trigger.entity()) {
-        println!("max_z: {}", max_z);
         transform.translation.z = max_z + 1.0;
     }
 
@@ -369,5 +411,73 @@ fn cancel_all_move(
         for entity in query.iter() {
             commands.entity(entity).remove::<MoveStart>();
         }
+    }
+}
+
+#[derive(Component)]
+struct Selected;
+
+fn on_selected(
+    trigger: Trigger<OnInsert, Selected>,
+    query: Query<&Children>,
+    mut q_image: Query<&mut Transform, (With<ColorImage>, Without<WhiteImage>)>,
+    mut w_image: Query<&mut Sprite, (With<WhiteImage>, Without<ColorImage>)>,
+) {
+    let children = query.get(trigger.entity()).unwrap();
+
+    for child in children.iter() {
+        if let Ok(mut transform) = q_image.get_mut(*child) {
+            transform.translation.x -= 4.0;
+            transform.translation.y += 4.0;
+        }
+        if let Ok(mut image) = w_image.get_mut(*child) {
+            image.color = Color::Srgba(YELLOW);
+        }
+    }
+}
+
+fn on_not_selected(
+    trigger: Trigger<OnRemove, Selected>,
+    query: Query<&Children>,
+    mut q_image: Query<&mut Transform, (With<ColorImage>, Without<WhiteImage>)>,
+    mut w_image: Query<&mut Sprite, (With<WhiteImage>, Without<ColorImage>)>,
+) {
+    let children = query.get(trigger.entity()).unwrap();
+
+    for child in children.iter() {
+        if let Ok(mut transform) = q_image.get_mut(*child) {
+            transform.translation.x += 4.0;
+            transform.translation.y -= 4.0;
+        }
+        if let Ok(mut image) = w_image.get_mut(*child) {
+            image.color = Color::Srgba(Srgba::WHITE);
+        }
+    }
+}
+
+fn on_add_move_start(
+    trigger: Trigger<OnInsert, MoveStart>,
+    query: Query<&MoveTogether>,
+    mut commands: Commands,
+) {
+    let move_together = query.get(trigger.entity()).unwrap();
+    commands.entity(trigger.entity()).insert(Selected);
+    for entity in move_together.iter() {
+        if entity == &trigger.entity() {
+            continue;
+        }
+        commands.entity(*entity).insert(Selected);
+    }
+}
+
+fn on_remove_move_start(
+    trigger: Trigger<OnRemove, MoveStart>,
+    query: Query<&MoveTogether>,
+    mut commands: Commands,
+) {
+    let move_together = query.get(trigger.entity()).unwrap();
+    commands.entity(trigger.entity()).remove::<Selected>();
+    for entity in move_together.iter() {
+        commands.entity(*entity).remove::<Selected>();
     }
 }

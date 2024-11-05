@@ -887,6 +887,20 @@ impl JigsawPiece {
         piece_image.into()
     }
 
+    /// Fills the not transparent parts of the image with white color
+    pub fn fill_white(&self, image: &DynamicImage) -> DynamicImage {
+        let mut white_image = image.to_rgba8();
+        white_image
+            .par_enumerate_pixels_mut()
+            .for_each(|(_, _, pixel)| {
+                if pixel.0[3] != 0 {
+                    *pixel = WHITE_COLOR;
+                }
+            });
+
+        white_image.into()
+    }
+
     fn draw_bezier(&self, image: &mut RgbaImage, color: Rgba<u8>) {
         let top_left_x = self.top_left_x as f64;
         let top_left_y = self.top_left_y as f64;
