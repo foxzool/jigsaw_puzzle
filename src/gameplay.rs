@@ -64,7 +64,7 @@ fn spawn_piece(
                 .spawn((
                     Piece(piece.clone()),
                     MoveTogether::default(),
-                    Transform::from_xyz(calc_position.x, calc_position.y, -1.0),
+                    Transform::from_xyz(calc_position.x, calc_position.y, piece.index as f32),
                 ))
                 .observe(on_click_piece)
                 .observe(on_move_end)
@@ -98,7 +98,7 @@ fn spawn_piece(
                             Transform::from_xyz(
                                 -piece_clone.calc_offset().0,
                                 piece_clone.calc_offset().1,
-                                piece_clone.index as f32,
+                                0.0,
                             ),
                         ))
                         .id();
@@ -177,7 +177,7 @@ fn on_drag_start(
         let point = camera
             .viewport_to_world_2d(camera_global_transform, click_position)
             .unwrap();
-        transform.translation.z = 1.0;
+        transform.translation.z = 100.0;
         commands.entity(trigger.entity()).insert(MoveStart {
             image_position: *transform,
             click_position: point,
@@ -210,13 +210,12 @@ fn on_click_piece(
             .viewport_to_world_2d(camera_global_transform, click_position)
             .unwrap();
 
-        // move end
         if opt_moveable.is_some() {
             transform.translation.z = 0.0;
             commands.entity(trigger.entity()).remove::<MoveStart>();
             commands.trigger_targets(MoveEnd, vec![trigger.entity()]);
         } else {
-            transform.translation.z = 1.0;
+            transform.translation.z = 100.0;
             commands.entity(trigger.entity()).insert(MoveStart {
                 image_position: *transform,
                 click_position: point,
@@ -268,6 +267,7 @@ fn on_move_end(
     let end_entity = trigger.entity();
 
     let mut all_entities = HashSet::default();
+    let mut max_z = 0f32;
     while let Some([(e1, p1, transform1, together1), (e2, p2, transform2, together2)]) =
         iter.fetch_next()
     {
@@ -278,6 +278,16 @@ fn on_move_end(
         } else {
             continue;
         };
+
+        // calculate the max z value if close enough
+        if target_transform
+            .translation
+            .xy()
+            .distance(compare_transform.translation.xy())
+            < (target.crop_width.max(target.crop_height) as f32)
+        {
+            max_z = max_z.max(compare_transform.translation.z);
+        }
 
         let target_loc = (
             target_transform.translation.x,
@@ -329,6 +339,11 @@ fn on_move_end(
 
     if all_entities.len() == generator.pieces_count() {
         debug!("All pieces have been merged");
+    }
+
+    if let Ok((_e, _p, mut transform, _together)) = query.get_mut(trigger.entity()) {
+        println!("max_z: {}", max_z);
+        transform.translation.z = max_z + 1.0;
     }
 
     commands.trigger(CombineTogether(all_entities));
