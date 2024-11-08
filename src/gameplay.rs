@@ -1,7 +1,7 @@
 use crate::ui::BoardBackgroundImage;
 use crate::Piece;
 use bevy::asset::RenderAssetUsages;
-use bevy::color::palettes::basic::{GRAY, OLIVE, YELLOW};
+use bevy::color::palettes::basic::YELLOW;
 use bevy::ecs::world::CommandQueue;
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
@@ -13,7 +13,8 @@ use log::debug;
 use rand::Rng;
 
 pub(super) fn plugin(app: &mut App) {
-    app.add_systems(Startup, setup_generator)
+    app
+        // .add_systems(Startup, setup_generator)
         .add_systems(Update, (move_piece, cancel_all_move))
         .add_systems(
             PostUpdate,
