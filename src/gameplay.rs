@@ -13,8 +13,7 @@ use log::debug;
 use rand::Rng;
 
 pub(super) fn plugin(app: &mut App) {
-    app
-        // .add_systems(Startup, setup_generator)
+    app.add_systems(Startup, setup_generator)
         .add_systems(Update, (move_piece, cancel_all_move))
         .add_systems(
             PostUpdate,

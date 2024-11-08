@@ -1,5 +1,4 @@
 use crate::gameplay::JigsawPuzzleGenerator;
-use bevy::color::palettes::basic::MAROON;
 use bevy::prelude::*;
 
 pub(super) fn plugin(app: &mut App) {
@@ -14,14 +13,25 @@ pub struct MenuIcon;
 pub struct ZoomInButton;
 #[derive(Component)]
 pub struct ZoomOutButton;
-
 #[derive(Component)]
 pub struct HintImageButton;
+#[derive(Component)]
+pub struct FullscreenButton;
+#[derive(Component)]
+pub struct PauseButton;
+#[derive(Component)]
+pub struct IdeaButton;
+#[derive(Component)]
+pub struct PuzzleHintButton;
+#[derive(Component)]
+pub struct PuzzleHintChildButton;
+#[derive(Component)]
+pub struct BackgroundHintButton;
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn(Camera2d);
 
-    let background_color = MAROON.into();
+    // let background_color = MAROON.into();
     let root_node = commands
         .spawn(Node {
             width: Val::Percent(100.),
@@ -56,7 +66,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
                     builder.spawn((
                         UiImage::new(asset_server.load("icons/menu.png")),
                         Node {
-                            height: Val::Px(50.),
+                            height: Val::Px(40.),
                             ..default()
                         },
                         MenuIcon,
@@ -69,7 +79,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
                         })
                         .with_children(|builder| {
                             builder.spawn((
-                                UiImage::new(asset_server.load("icons/zoom-out.png")),
+                                UiImage::new(asset_server.load("icons/zoom_out.png")),
                                 Node {
                                     height: Val::Px(30.),
                                     margin: UiRect {
@@ -82,7 +92,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
                                 ZoomOutButton,
                             ));
                             builder.spawn((
-                                UiImage::new(asset_server.load("icons/zoom-in.png")),
+                                UiImage::new(asset_server.load("icons/zoom_in.png")),
                                 Node {
                                     height: Val::Px(30.),
                                     margin: UiRect {
@@ -96,7 +106,78 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
                             ));
                         });
                 });
-            builder.spawn((Text::new("Bottom Left"), BackgroundColor(background_color)));
+
+            // bottom left
+            builder.spawn(Node::default()).with_children(|p| {
+                // idea
+                p.spawn((
+                    UiImage::new(asset_server.load("icons/lamp.png")),
+                    Node {
+                        height: Val::Px(40.),
+                        margin: UiRect::axes(Val::Px(0.), Val::Px(5.)),
+                        ..default()
+                    },
+                    IdeaButton,
+                ));
+
+                // puzzle control
+                p.spawn((
+                    Node {
+                        margin: UiRect::all(Val::Px(5.)),
+                        ..default()
+                    },
+                    PuzzleHintButton,
+                ))
+                .with_children(|p| {
+                    p.spawn((
+                        UiImage {
+                            image: asset_server.load("icons/puzzle_s.png"),
+                            flip_x: true,
+                            ..default()
+                        },
+                        Node {
+                            height: Val::Px(40.),
+                            margin: UiRect::axes(Val::Px(2.), Val::Px(5.)),
+                            ..default()
+                        },
+                    ));
+
+                    p.spawn((
+                        UiImage::new(asset_server.load("icons/puzzle_e.png")),
+                        Node {
+                            height: Val::Px(30.),
+                            margin: UiRect {
+                                top: Val::Px(10.),
+                                bottom: Val::Px(10.),
+
+                                ..default()
+                            },
+                            ..default()
+                        },
+                        PuzzleHintChildButton,
+                    ));
+
+                    p.spawn((
+                        UiImage::new(asset_server.load("icons/puzzle_s.png")),
+                        Node {
+                            height: Val::Px(40.),
+                            margin: UiRect::axes(Val::Px(2.), Val::Px(5.)),
+                            ..default()
+                        },
+                    ));
+                });
+
+                // background hint
+                p.spawn((
+                    UiImage::new(asset_server.load("icons/ghost.png")),
+                    Node {
+                        height: Val::Px(40.),
+                        margin: UiRect::axes(Val::Px(0.), Val::Px(5.)),
+                        ..default()
+                    },
+                    BackgroundHintButton,
+                ));
+            });
         })
         .id();
 
@@ -109,16 +190,40 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
             ..default()
         })
         .with_children(|builder| {
+            // top right
             builder.spawn((
                 UiImage::new(asset_server.load("icons/photo.png")),
                 Node {
-                    height: Val::Px(50.),
+                    height: Val::Px(40.),
                     margin: UiRect::all(Val::Px(5.)),
                     ..default()
                 },
                 HintImageButton,
             ));
-            builder.spawn((Text::new("Right Bottom"), BackgroundColor(background_color)));
+
+            // bottom right
+            builder.spawn(Node::default()).with_children(|p| {
+                p.spawn((
+                    UiImage::new(asset_server.load("icons/pause.png")),
+                    Node {
+                        height: Val::Px(40.),
+                        margin: UiRect {
+                            right: Val::Px(10.),
+                            ..default()
+                        },
+                        ..default()
+                    },
+                    PauseButton,
+                ));
+                p.spawn((
+                    UiImage::new(asset_server.load("icons/fullscreen.png")),
+                    Node {
+                        height: Val::Px(40.),
+                        ..default()
+                    },
+                    FullscreenButton,
+                ));
+            });
         })
         .id();
     commands
