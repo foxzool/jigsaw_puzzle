@@ -5,6 +5,7 @@ Cargo.lock
 /.idea
 /.vscode
 .zed
+.DS_Store
 
 /tiles
 /images
