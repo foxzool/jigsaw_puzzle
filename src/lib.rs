@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy::winit::WinitSettings;
 use jigsaw_puzzle_generator::JigsawPiece;
 
 mod gameplay;
@@ -22,7 +23,8 @@ impl Plugin for PuzzlePlugin {
                     }),
                     ..default()
                 }),
-        );
+        )
+        .insert_resource(WinitSettings::desktop_app());
 
         app.add_plugins((ui::plugin, gameplay::plugin));
     }

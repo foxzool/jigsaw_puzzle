@@ -4,6 +4,7 @@ use bevy::prelude::*;
 pub(super) fn plugin(app: &mut App) {
     app.insert_resource(ClearColor(Color::srgb(0.9, 0.9, 0.9)))
         .add_systems(Startup, setup)
+        // .add_systems(Startup, setup_ui)
         .add_systems(Update, (adjust_camera_on_added_sprite,));
 }
 
@@ -28,9 +29,12 @@ pub struct PuzzleHintChildButton;
 #[derive(Component)]
 pub struct BackgroundHintButton;
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: Commands) {
     commands.spawn(Camera2d);
+}
 
+#[allow(dead_code)]
+fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
     // let background_color = MAROON.into();
     let root_node = commands
         .spawn(Node {
