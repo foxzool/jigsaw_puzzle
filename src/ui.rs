@@ -1,11 +1,21 @@
 use crate::gameplay::JigsawPuzzleGenerator;
+use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
 pub(super) fn plugin(app: &mut App) {
     app.insert_resource(ClearColor(Color::srgb(0.9, 0.9, 0.9)))
         .add_systems(Startup, setup)
         // .add_systems(Startup, setup_ui)
-        .add_systems(Update, (adjust_camera_on_added_sprite,));
+        .add_event::<AdjustScale>()
+        .add_systems(
+            Update,
+            (
+                adjust_camera_on_added_sprite,
+                adjust_camera_scale,
+                handle_keyboard_input,
+                handle_mouse_wheel_input,
+            ),
+        );
 }
 
 #[derive(Component)]
@@ -253,5 +263,42 @@ fn adjust_camera_on_added_sprite(
         let target_scale = scale / 0.6;
         camera_2d.scale = target_scale;
         commands.entity(entity).insert(Visibility::Hidden);
+    }
+}
+
+#[derive(Event)]
+pub struct AdjustScale(pub f32);
+
+const MAX_SCALE: f32 = 3.0;
+const MIN_SCALE: f32 = 0.5;
+
+/// Adjust the camera scale on event
+fn adjust_camera_scale(
+    mut event: EventReader<AdjustScale>,
+    mut camera_2d: Single<&mut OrthographicProjection, With<Camera2d>>,
+) {
+    for AdjustScale(scale) in event.read() {
+        let new_scale = camera_2d.scale + scale;
+        debug!("new scale: {}", new_scale);
+        if (MIN_SCALE..=MAX_SCALE).contains(&new_scale) {
+            camera_2d.scale = new_scale;
+        }
+    }
+}
+
+fn handle_keyboard_input(keyboard_input: Res<ButtonInput<KeyCode>>, mut commands: Commands) {
+    if keyboard_input.just_pressed(KeyCode::PageUp) {
+        commands.send_event(AdjustScale(0.1));
+    } else if keyboard_input.just_pressed(KeyCode::PageDown) {
+        commands.send_event(AdjustScale(-0.1));
+    }
+}
+
+fn handle_mouse_wheel_input(
+    mut mouse_wheel_input: EventReader<MouseWheel>,
+    mut commands: Commands,
+) {
+    for event in mouse_wheel_input.read() {
+        commands.send_event(AdjustScale(event.y * 0.1));
     }
 }
