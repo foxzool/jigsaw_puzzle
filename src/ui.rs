@@ -3,10 +3,10 @@ use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
 pub(super) fn plugin(app: &mut App) {
-    app.insert_resource(ClearColor(Color::srgb(0.9, 0.9, 0.9)))
-        .add_systems(Startup, setup)
+    app.add_systems(Startup, setup)
         // .add_systems(Startup, setup_ui)
         .add_event::<AdjustScale>()
+        .add_event::<ToggleBackgroundHint>()
         .add_systems(
             Update,
             (
@@ -14,6 +14,7 @@ pub(super) fn plugin(app: &mut App) {
                 adjust_camera_scale,
                 handle_keyboard_input,
                 handle_mouse_wheel_input,
+                handle_toggle_background_hint,
             ),
         );
 }
@@ -254,7 +255,6 @@ fn adjust_camera_on_added_sprite(
     mut camera_2d: Single<&mut OrthographicProjection, With<Camera2d>>,
     window: Single<&Window>,
     generator: Res<JigsawPuzzleGenerator>,
-    mut commands: Commands,
 ) {
     if let Ok(entity) = sprite.get_single() {
         let window_width = window.resolution.width();
@@ -262,7 +262,6 @@ fn adjust_camera_on_added_sprite(
         let scale = image_width / window_width;
         let target_scale = scale / 0.6;
         camera_2d.scale = target_scale;
-        commands.entity(entity).insert(Visibility::Hidden);
     }
 }
 
@@ -291,6 +290,8 @@ fn handle_keyboard_input(keyboard_input: Res<ButtonInput<KeyCode>>, mut commands
         commands.send_event(AdjustScale(0.1));
     } else if keyboard_input.just_pressed(KeyCode::PageDown) {
         commands.send_event(AdjustScale(-0.1));
+    } else if keyboard_input.just_pressed(KeyCode::Space) {
+        commands.send_event(ToggleBackgroundHint);
     }
 }
 
@@ -300,5 +301,19 @@ fn handle_mouse_wheel_input(
 ) {
     for event in mouse_wheel_input.read() {
         commands.send_event(AdjustScale(event.y * 0.1));
+    }
+}
+
+#[derive(Event)]
+pub struct ToggleBackgroundHint;
+
+fn handle_toggle_background_hint(
+    mut event: EventReader<ToggleBackgroundHint>,
+    mut query: Query<&mut Visibility, With<BoardBackgroundImage>>,
+) {
+    for _ in event.read() {
+        for mut visible in query.iter_mut() {
+            visible.toggle_visible_hidden();
+        }
     }
 }

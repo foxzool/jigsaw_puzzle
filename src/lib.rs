@@ -24,6 +24,7 @@ impl Plugin for PuzzlePlugin {
                     ..default()
                 }),
         )
+        .insert_resource(ClearColor(Color::srgb(0.9, 0.9, 0.9)))
         .insert_resource(WinitSettings::desktop_app());
 
         app.add_plugins((ui::plugin, gameplay::plugin));

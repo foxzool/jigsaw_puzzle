@@ -30,13 +30,28 @@ fn setup_generator(mut commands: Commands, asset_server: Res<AssetServer>) {
     let generator = JigsawGenerator::from_path(image_path, 9, 6).expect("Failed to load image");
 
     // load image from dynamic image
-    let image = asset_server.add(Image::from_dynamic(
+    let image = Image::from_dynamic(
         generator.origin_image().clone(),
         true,
         RenderAssetUsages::RENDER_WORLD,
-    ));
+    );
 
-    commands.spawn((Sprite::from_image(image), BoardBackgroundImage));
+    commands
+        .spawn((
+            Sprite::from_color(
+                Color::Srgba(Srgba::new(0.0, 0.0, 0.0, 0.6)),
+                image.size_f32(),
+            ),
+            BoardBackgroundImage,
+            Visibility::Hidden,
+        ))
+        .with_children(|p| {
+            p.spawn((
+                Sprite::from_image(asset_server.add(image)),
+                Transform::from_xyz(0.0, 0.0, -1.0),
+            ));
+        });
+
     commands.insert_resource(JigsawPuzzleGenerator(generator));
 }
 
