@@ -5,7 +5,7 @@ use bevy::prelude::*;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(Startup, setup)
-        // .add_systems(Startup, setup_ui)
+        .add_systems(Startup, setup_ui)
         .add_event::<AdjustScale>()
         .add_event::<ToggleBackgroundHint>()
         .add_event::<TogglePuzzleHint>()
@@ -51,23 +51,29 @@ fn setup(mut commands: Commands) {
 fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
     // let background_color = MAROON.into();
     let root_node = commands
-        .spawn(Node {
-            width: Val::Percent(100.),
-            height: Val::Percent(100.),
-            justify_content: JustifyContent::SpaceBetween,
-            ..default()
-        })
+        .spawn((
+            Node {
+                width: Val::Percent(100.),
+                height: Val::Percent(100.),
+                justify_content: JustifyContent::SpaceBetween,
+                ..default()
+            },
+            PickingBehavior::IGNORE,
+        ))
         .id();
 
     let left_column = commands
-        .spawn(Node {
-            width: Val::Vw(15.),
-            flex_direction: FlexDirection::Column,
-            justify_content: JustifyContent::SpaceBetween,
-            align_items: AlignItems::Start,
-            margin: UiRect::axes(Val::Px(15.), Val::Px(5.)),
-            ..default()
-        })
+        .spawn((
+            Node {
+                width: Val::Vw(15.),
+                flex_direction: FlexDirection::Column,
+                justify_content: JustifyContent::SpaceBetween,
+                align_items: AlignItems::Start,
+                margin: UiRect::axes(Val::Px(15.), Val::Px(5.)),
+                ..default()
+            },
+            PickingBehavior::IGNORE,
+        ))
         .with_children(|builder| {
             // top left
             builder
@@ -200,13 +206,16 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
         .id();
 
     let right_column = commands
-        .spawn(Node {
-            flex_direction: FlexDirection::Column,
-            justify_content: JustifyContent::SpaceBetween,
-            align_items: AlignItems::End,
-            margin: UiRect::axes(Val::Px(15.), Val::Px(5.)),
-            ..default()
-        })
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Column,
+                justify_content: JustifyContent::SpaceBetween,
+                align_items: AlignItems::End,
+                margin: UiRect::axes(Val::Px(15.), Val::Px(5.)),
+                ..default()
+            },
+            PickingBehavior::IGNORE,
+        ))
         .with_children(|builder| {
             // top right
             builder.spawn((
