@@ -8,13 +8,15 @@ use bevy::sprite::Anchor;
 use bevy::tasks::futures_lite::future;
 use bevy::tasks::{block_on, AsyncComputeTaskPool, Task};
 use bevy::utils::HashSet;
+use jigsaw_puzzle_generator::image::GenericImageView;
 use jigsaw_puzzle_generator::{JigsawGenerator, JigsawPiece};
 use log::debug;
 use rand::Rng;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(Startup, setup_generator)
-        .add_systems(Update, (move_piece, cancel_all_move))
+        .add_event::<Shuffle>()
+        .add_systems(Update, (move_piece, cancel_all_move, shuffle_pieces))
         .add_systems(
             PostUpdate,
             (
@@ -68,20 +70,15 @@ struct WhiteImage;
 struct ColorImage;
 
 /// Spawn the pieces of the jigsaw puzzle
-fn spawn_piece(
-    mut commands: Commands,
-    generator: Res<JigsawPuzzleGenerator>,
-    window: Single<&Window>,
-    camera: Single<&OrthographicProjection, With<Camera2d>>,
-) {
+fn spawn_piece(mut commands: Commands, generator: Res<JigsawPuzzleGenerator>) {
     if let Ok(template) = generator.generate(false) {
         let thread_pool = AsyncComputeTaskPool::get();
         for piece in template.pieces.iter() {
             let template_clone = template.clone();
             let piece_clone = piece.clone();
 
-            let calc_position = random_position(&piece, window.resolution.size(), camera.scale);
-            // let calc_position = init_position(piece, template.origin_image.dimensions());
+            // let calc_position = random_position(&piece, window.resolution.size(), camera.scale);
+            let calc_position = init_position(piece, template.origin_image.dimensions());
             let entity = commands
                 .spawn((
                     Piece(piece.clone()),
@@ -168,6 +165,7 @@ fn spawn_piece(
 
             commands.entity(entity).insert(CropTask(task));
         }
+        commands.send_event(Shuffle::Random);
     };
 }
 
@@ -191,22 +189,6 @@ fn init_position(piece: &JigsawPiece, origin_image_size: (u32, u32)) -> Vec2 {
         image_top_left.0 + piece.start_point.0,
         image_top_left.1 - piece.start_point.1,
     )
-}
-
-/// Calculate a random position for the piece
-#[allow(dead_code)]
-fn random_position(piece: &JigsawPiece, window_size: Vec2, scale: f32) -> Vec2 {
-    let window_width = window_size.x / 2.0 * scale;
-    let window_height = window_size.y / 2.0 * scale;
-    let min_x = -window_width + piece.crop_width as f32;
-    let min_y = -window_height + piece.crop_height as f32;
-    let max_x = window_width - piece.crop_width as f32;
-    let max_y = window_height - piece.crop_height as f32;
-
-    let mut rng = rand::thread_rng();
-    let x = rng.gen_range(min_x..max_x);
-    let y = rng.gen_range(min_y..max_y);
-    Vec2::new(x, y)
 }
 
 fn handle_tasks(mut commands: Commands, mut crop_tasks: Query<&mut CropTask>) {
@@ -494,5 +476,77 @@ fn on_remove_move_start(
     commands.entity(trigger.entity()).remove::<Selected>();
     for entity in move_together.iter() {
         commands.entity(*entity).remove::<Selected>();
+    }
+}
+
+/// Calculate a random position for the piece
+#[allow(dead_code)]
+fn random_position(piece: &JigsawPiece, window_size: Vec2, scale: f32) -> Vec2 {
+    let half_width = window_size.x / 2.0 * scale;
+    let half_height = window_size.y / 2.0 * scale;
+    let min_x = -half_width + piece.crop_width as f32;
+    let min_y = -half_height + piece.crop_height as f32;
+    let max_x = half_width - piece.crop_width as f32;
+    let max_y = half_height - piece.crop_height as f32;
+
+    let mut rng = rand::thread_rng();
+    let x = rng.gen_range(min_x..max_x);
+    let y = rng.gen_range(min_y..max_y);
+    Vec2::new(x, y)
+}
+
+/// Calculate an edge position for the piece
+#[allow(dead_code)]
+fn edge_position(piece: &JigsawPiece, window_size: Vec2, scale: f32) -> Vec2 {
+    let half_width = window_size.x / 2.0 * scale;
+    let half_height = window_size.y / 2.0 * scale;
+    let min_y = -half_height + piece.crop_height as f32;
+    let max_x = half_width - piece.crop_width as f32;
+
+    let mut rng = rand::thread_rng();
+    let ran_side = rng.gen_range(0..4);
+    let (x, y) = match ran_side {
+        // top
+        0 => (rng.gen_range(-half_width..max_x), half_height),
+        // right
+        1 => (max_x, rng.gen_range(min_y..half_height)),
+        // bottom
+        2 => (rng.gen_range(-half_width..max_x), min_y),
+        // left
+        3 => (-half_width, rng.gen_range(min_y..half_height)),
+        _ => (0.0, 0.0),
+    };
+
+    Vec2::new(x, y)
+}
+
+#[derive(Event)]
+pub enum Shuffle {
+    Random,
+    Edge,
+}
+
+fn shuffle_pieces(
+    mut shuffle_events: EventReader<Shuffle>,
+    mut query: Query<(&Piece, &mut Transform)>,
+    window: Single<&Window>,
+    camera: Single<&OrthographicProjection, With<Camera2d>>,
+) {
+    for event in shuffle_events.read() {
+        match event {
+            Shuffle::Random => {
+                for (piece, mut transform) in &mut query.iter_mut() {
+                    let random_pos =
+                        random_position(&piece, window.resolution.size(), camera.scale);
+                    transform.translation = random_pos.extend(piece.index as f32);
+                }
+            }
+            Shuffle::Edge => {
+                for (piece, mut transform) in &mut query.iter_mut() {
+                    let edge_pos = edge_position(&piece, window.resolution.size(), camera.scale);
+                    transform.translation = edge_pos.extend(piece.index as f32);
+                }
+            }
+        }
     }
 }

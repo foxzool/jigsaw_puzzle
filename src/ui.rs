@@ -1,4 +1,4 @@
-use crate::gameplay::{JigsawPuzzleGenerator, MoveTogether, Selected};
+use crate::gameplay::{JigsawPuzzleGenerator, MoveTogether, Selected, Shuffle};
 use crate::Piece;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
@@ -295,6 +295,10 @@ fn handle_keyboard_input(keyboard_input: Res<ButtonInput<KeyCode>>, mut commands
         commands.send_event(ToggleBackgroundHint);
     } else if keyboard_input.just_pressed(KeyCode::KeyH) {
         commands.send_event(TogglePuzzleHint);
+    } else if keyboard_input.just_pressed(KeyCode::KeyE) {
+        commands.send_event(Shuffle::Edge);
+    } else if keyboard_input.just_pressed(KeyCode::KeyR) {
+        commands.send_event(Shuffle::Random);
     }
 }
 
