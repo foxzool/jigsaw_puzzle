@@ -1,4 +1,5 @@
-use crate::gameplay::JigsawPuzzleGenerator;
+use crate::gameplay::{JigsawPuzzleGenerator, MoveTogether, Selected};
+use crate::Piece;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
@@ -7,6 +8,7 @@ pub(super) fn plugin(app: &mut App) {
         // .add_systems(Startup, setup_ui)
         .add_event::<AdjustScale>()
         .add_event::<ToggleBackgroundHint>()
+        .add_event::<TogglePuzzleHint>()
         .add_systems(
             Update,
             (
@@ -15,6 +17,7 @@ pub(super) fn plugin(app: &mut App) {
                 handle_keyboard_input,
                 handle_mouse_wheel_input,
                 handle_toggle_background_hint,
+                handle_toggle_puzzle_hint,
             ),
         );
 }
@@ -251,18 +254,16 @@ pub struct BoardBackgroundImage;
 
 /// Adjust the camera to fit the image
 fn adjust_camera_on_added_sprite(
-    sprite: Query<Entity, Added<BoardBackgroundImage>>,
+    _sprite: Single<Entity, Added<BoardBackgroundImage>>,
     mut camera_2d: Single<&mut OrthographicProjection, With<Camera2d>>,
     window: Single<&Window>,
     generator: Res<JigsawPuzzleGenerator>,
 ) {
-    if let Ok(entity) = sprite.get_single() {
-        let window_width = window.resolution.width();
-        let image_width = generator.origin_image().width() as f32;
-        let scale = image_width / window_width;
-        let target_scale = scale / 0.6;
-        camera_2d.scale = target_scale;
-    }
+    let window_width = window.resolution.width();
+    let image_width = generator.origin_image().width() as f32;
+    let scale = image_width / window_width;
+    let target_scale = scale / 0.6;
+    camera_2d.scale = target_scale;
 }
 
 #[derive(Event)]
@@ -292,6 +293,8 @@ fn handle_keyboard_input(keyboard_input: Res<ButtonInput<KeyCode>>, mut commands
         commands.send_event(AdjustScale(-0.1));
     } else if keyboard_input.just_pressed(KeyCode::Space) {
         commands.send_event(ToggleBackgroundHint);
+    } else if keyboard_input.just_pressed(KeyCode::KeyH) {
+        commands.send_event(TogglePuzzleHint);
     }
 }
 
@@ -314,6 +317,46 @@ fn handle_toggle_background_hint(
     for _ in event.read() {
         for mut visible in query.iter_mut() {
             visible.toggle_visible_hidden();
+        }
+    }
+}
+
+#[derive(Event)]
+pub struct TogglePuzzleHint;
+
+fn handle_toggle_puzzle_hint(
+    mut event: EventReader<TogglePuzzleHint>,
+    selected_query: Query<Entity, With<Selected>>,
+    piece_query: Query<(Entity, &Piece, &MoveTogether), Without<Selected>>,
+    mut commands: Commands,
+) {
+    for _ in event.read() {
+        for entity in selected_query.iter() {
+            commands.entity(entity).remove::<Selected>();
+        }
+        let mut first_piece = None;
+        let mut first_entity = None;
+        let mut second_entity = None;
+        for (entity, piece, move_together) in piece_query.iter() {
+            if move_together.len() > 0 {
+                continue;
+            }
+            first_piece = Some(piece);
+            first_entity = Some(entity);
+        }
+        if let Some(first_piece) = first_piece {
+            for (entity, piece, move_together) in piece_query.iter() {
+                if move_together.len() > 0 {
+                    continue;
+                }
+                if first_piece.beside(&piece) {
+                    second_entity = Some(entity);
+                }
+            }
+        }
+        if let (Some(first_entity), Some(second_entity)) = (first_entity, second_entity) {
+            commands.entity(first_entity).insert(Selected);
+            commands.entity(second_entity).insert(Selected);
         }
     }
 }

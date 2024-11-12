@@ -313,7 +313,7 @@ fn move_piece(
 struct MoveEnd;
 
 #[derive(Component, Deref, DerefMut, Default)]
-struct MoveTogether(HashSet<Entity>);
+pub struct MoveTogether(pub HashSet<Entity>);
 
 fn on_move_end(
     trigger: Trigger<MoveEnd>,
@@ -430,7 +430,7 @@ fn cancel_all_move(
 }
 
 #[derive(Component)]
-struct Selected;
+pub struct Selected;
 
 fn on_selected(
     trigger: Trigger<OnInsert, Selected>,

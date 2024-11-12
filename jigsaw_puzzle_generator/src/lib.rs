@@ -1017,6 +1017,13 @@ impl JigsawPiece {
         self.top_edge == other.bottom_edge
     }
 
+    pub fn beside(&self, other: &JigsawPiece) -> bool {
+        self.on_the_top_side(other)
+            || self.on_the_bottom_side(other)
+            || self.on_the_left_side(other)
+            || self.on_the_right_side(other)
+    }
+
     /// Checks if a given point is inside the puzzle piece
     /// Trick: Check if the point is inside the rotated subpath. If not, check if it is inside the original subpath
     fn contains(&self, point: DVec2) -> bool {
