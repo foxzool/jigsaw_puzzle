@@ -369,20 +369,22 @@ fn handle_toggle_puzzle_hint(
         let mut first_piece = None;
         let mut first_entity = None;
         let mut second_entity = None;
-        for (entity, piece, move_together) in piece_query.iter() {
+        'f1: for (entity, piece, move_together) in piece_query.iter() {
             if move_together.len() > 0 {
-                continue;
+                continue 'f1;
             }
             first_piece = Some(piece);
             first_entity = Some(entity);
+            break 'f1;
         }
         if let Some(first_piece) = first_piece {
-            for (entity, piece, move_together) in piece_query.iter() {
+            'f2: for (entity, piece, move_together) in piece_query.iter() {
                 if move_together.len() > 0 {
-                    continue;
+                    continue 'f2;
                 }
                 if first_piece.beside(&piece) {
                     second_entity = Some(entity);
+                    break 'f2;
                 }
             }
         }
