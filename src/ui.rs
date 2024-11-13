@@ -62,47 +62,48 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
         ))
         .id();
 
-    let left_column = commands
-        .spawn((
-            Node {
-                width: Val::Vw(15.),
-                flex_direction: FlexDirection::Column,
-                justify_content: JustifyContent::SpaceBetween,
-                align_items: AlignItems::Start,
-                margin: UiRect::axes(Val::Px(15.), Val::Px(5.)),
-                ..default()
-            },
-            PickingBehavior::IGNORE,
-        ))
-        .with_children(|builder| {
-            // top left
-            builder
-                .spawn((
-                    Node {
-                        width: Val::Percent(100.),
-                        height: Val::Px(50.),
-                        justify_content: JustifyContent::SpaceBetween,
-                        ..default()
-                    },
-                    // BackgroundColor(BLUE.into()),
-                ))
-                .with_children(|builder| {
-                    builder.spawn((
-                        UiImage::new(asset_server.load("icons/menu.png")),
+    let left_column =
+        commands
+            .spawn((
+                Node {
+                    width: Val::Vw(15.),
+                    flex_direction: FlexDirection::Column,
+                    justify_content: JustifyContent::SpaceBetween,
+                    align_items: AlignItems::Start,
+                    margin: UiRect::axes(Val::Px(15.), Val::Px(5.)),
+                    ..default()
+                },
+                PickingBehavior::IGNORE,
+            ))
+            .with_children(|builder| {
+                // top left
+                builder
+                    .spawn((
                         Node {
-                            height: Val::Px(40.),
+                            width: Val::Percent(100.),
+                            height: Val::Px(50.),
+                            justify_content: JustifyContent::SpaceBetween,
                             ..default()
                         },
-                        MenuIcon,
-                    ));
-                    builder
-                        .spawn(Node {
-                            height: Val::Px(30.0),
-                            justify_content: JustifyContent::End,
-                            ..default()
-                        })
-                        .with_children(|builder| {
-                            builder.spawn((
+                        // BackgroundColor(BLUE.into()),
+                    ))
+                    .with_children(|builder| {
+                        builder.spawn((
+                            UiImage::new(asset_server.load("icons/menu.png")),
+                            Node {
+                                height: Val::Px(40.),
+                                ..default()
+                            },
+                            MenuIcon,
+                        ));
+                        builder
+                            .spawn(Node {
+                                height: Val::Px(30.0),
+                                justify_content: JustifyContent::End,
+                                ..default()
+                            })
+                            .with_children(|builder| {
+                                builder.spawn((
                                 UiImage::new(asset_server.load("icons/zoom_out.png")),
                                 Node {
                                     height: Val::Px(30.),
@@ -114,8 +115,12 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                                     ..default()
                                 },
                                 ZoomOutButton,
-                            ));
-                            builder.spawn((
+                            )).observe(
+                                |_trigger: Trigger<Pointer<Click>>, mut commands: Commands| {
+                                    commands.send_event(AdjustScale(-0.1));
+                                },
+                            );
+                                builder.spawn((
                                 UiImage::new(asset_server.load("icons/zoom_in.png")),
                                 Node {
                                     height: Val::Px(30.),
@@ -127,83 +132,97 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                                     ..default()
                                 },
                                 ZoomInButton,
-                            ));
-                        });
-                });
+                            )).observe(
+                                |_trigger: Trigger<Pointer<Click>>, mut commands: Commands| {
+                                    commands.send_event(AdjustScale(0.1));
+                                },
+                            );
+                            });
+                    });
 
-            // bottom left
-            builder.spawn(Node::default()).with_children(|p| {
-                // idea
-                p.spawn((
-                    UiImage::new(asset_server.load("icons/lamp.png")),
-                    Node {
-                        height: Val::Px(40.),
-                        margin: UiRect::axes(Val::Px(0.), Val::Px(5.)),
-                        ..default()
-                    },
-                    IdeaButton,
-                ));
-
-                // puzzle control
-                p.spawn((
-                    Node {
-                        margin: UiRect::all(Val::Px(5.)),
-                        ..default()
-                    },
-                    PuzzleHintButton,
-                ))
-                .with_children(|p| {
+                // bottom left
+                builder.spawn(Node::default()).with_children(|p| {
+                    // idea
                     p.spawn((
-                        UiImage {
-                            image: asset_server.load("icons/puzzle_s.png"),
-                            flip_x: true,
-                            ..default()
-                        },
+                        UiImage::new(asset_server.load("icons/lamp.png")),
                         Node {
                             height: Val::Px(40.),
-                            margin: UiRect::axes(Val::Px(2.), Val::Px(5.)),
+                            margin: UiRect::axes(Val::Px(0.), Val::Px(5.)),
                             ..default()
                         },
-                    ));
+                        IdeaButton,
+                    ))
+                    .observe(
+                        |_trigger: Trigger<Pointer<Click>>, mut commands: Commands| {
+                            commands.send_event(TogglePuzzleHint);
+                        },
+                    );
 
+                    // puzzle control
                     p.spawn((
-                        UiImage::new(asset_server.load("icons/puzzle_e.png")),
                         Node {
-                            height: Val::Px(30.),
-                            margin: UiRect {
-                                top: Val::Px(10.),
-                                bottom: Val::Px(10.),
-
+                            margin: UiRect::all(Val::Px(5.)),
+                            ..default()
+                        },
+                        PuzzleHintButton,
+                    ))
+                    .with_children(|p| {
+                        p.spawn((
+                            UiImage {
+                                image: asset_server.load("icons/puzzle_s.png"),
+                                flip_x: true,
                                 ..default()
                             },
-                            ..default()
-                        },
-                        PuzzleHintChildButton,
-                    ));
+                            Node {
+                                height: Val::Px(40.),
+                                margin: UiRect::axes(Val::Px(2.), Val::Px(5.)),
+                                ..default()
+                            },
+                        ));
 
+                        p.spawn((
+                            UiImage::new(asset_server.load("icons/puzzle_e.png")),
+                            Node {
+                                height: Val::Px(30.),
+                                margin: UiRect {
+                                    top: Val::Px(10.),
+                                    bottom: Val::Px(10.),
+
+                                    ..default()
+                                },
+                                ..default()
+                            },
+                            PuzzleHintChildButton,
+                        ));
+
+                        p.spawn((
+                            UiImage::new(asset_server.load("icons/puzzle_s.png")),
+                            Node {
+                                height: Val::Px(40.),
+                                margin: UiRect::axes(Val::Px(2.), Val::Px(5.)),
+                                ..default()
+                            },
+                        ));
+                    });
+
+                    // background hint
                     p.spawn((
-                        UiImage::new(asset_server.load("icons/puzzle_s.png")),
+                        UiImage::new(asset_server.load("icons/ghost.png")),
                         Node {
                             height: Val::Px(40.),
-                            margin: UiRect::axes(Val::Px(2.), Val::Px(5.)),
+                            margin: UiRect::axes(Val::Px(0.), Val::Px(5.)),
                             ..default()
                         },
-                    ));
+                        BackgroundHintButton,
+                    ))
+                    .observe(
+                        |_trigger: Trigger<Pointer<Click>>, mut commands: Commands| {
+                            commands.send_event(ToggleBackgroundHint);
+                        },
+                    );
                 });
-
-                // background hint
-                p.spawn((
-                    UiImage::new(asset_server.load("icons/ghost.png")),
-                    Node {
-                        height: Val::Px(40.),
-                        margin: UiRect::axes(Val::Px(0.), Val::Px(5.)),
-                        ..default()
-                    },
-                    BackgroundHintButton,
-                ));
-            });
-        })
-        .id();
+            })
+            .id();
 
     let right_column = commands
         .spawn((
