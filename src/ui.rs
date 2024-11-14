@@ -2,6 +2,7 @@ use crate::gameplay::{JigsawPuzzleGenerator, MoveTogether, Selected, Shuffle};
 use crate::Piece;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
+use bevy::window::WindowMode;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(Startup, setup)
@@ -18,6 +19,7 @@ pub(super) fn plugin(app: &mut App) {
                 handle_mouse_wheel_input,
                 handle_toggle_background_hint,
                 handle_toggle_puzzle_hint,
+                exit_fullscreen_on_esc,
             ),
         );
 }
@@ -96,6 +98,8 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                             },
                             MenuIcon,
                         ));
+
+                        // zoom out button
                         builder
                             .spawn(Node {
                                 height: Val::Px(30.0),
@@ -120,6 +124,8 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                                     commands.send_event(AdjustScale(-0.1));
                                 },
                             );
+
+                                // zoom in button
                                 builder.spawn((
                                 UiImage::new(asset_server.load("icons/zoom_in.png")),
                                 Node {
@@ -268,7 +274,12 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                         ..default()
                     },
                     FullscreenButton,
-                ));
+                ))
+                .observe(
+                    |_trigger: Trigger<Pointer<Click>>, mut window: Single<&mut Window>| {
+                        window.mode = WindowMode::Fullscreen(MonitorSelection::Current);
+                    },
+                );
             });
         })
         .id();
@@ -392,5 +403,15 @@ fn handle_toggle_puzzle_hint(
             commands.entity(first_entity).insert(Selected);
             commands.entity(second_entity).insert(Selected);
         }
+    }
+}
+
+fn exit_fullscreen_on_esc(mut window: Single<&mut Window>, input: Res<ButtonInput<KeyCode>>) {
+    if !window.focused {
+        return;
+    }
+
+    if input.just_pressed(KeyCode::Escape) {
+        window.mode = WindowMode::Windowed;
     }
 }
