@@ -84,6 +84,7 @@ fn spawn_piece(mut commands: Commands, generator: Res<JigsawPuzzleGenerator>) {
                     Piece(piece.clone()),
                     MoveTogether::default(),
                     Transform::from_xyz(calc_position.x, calc_position.y, piece.index as f32),
+                    Visibility::Visible,
                 ))
                 .observe(on_click_piece)
                 .observe(on_move_end)

@@ -10,6 +10,7 @@ pub(super) fn plugin(app: &mut App) {
         .add_event::<AdjustScale>()
         .add_event::<ToggleBackgroundHint>()
         .add_event::<TogglePuzzleHint>()
+        .add_event::<ToggleEdgeHint>()
         .add_systems(
             Update,
             (
@@ -20,6 +21,7 @@ pub(super) fn plugin(app: &mut App) {
                 handle_toggle_background_hint,
                 handle_toggle_puzzle_hint,
                 exit_fullscreen_on_esc,
+                handle_puzzle_hint,
             ),
         );
 }
@@ -39,7 +41,7 @@ pub struct PauseButton;
 #[derive(Component)]
 pub struct IdeaButton;
 #[derive(Component)]
-pub struct PuzzleHintButton;
+pub struct EdgeHintButton;
 #[derive(Component)]
 pub struct PuzzleHintChildButton;
 #[derive(Component)]
@@ -165,51 +167,57 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                     );
 
                     // puzzle control
-                    p.spawn((
+                    p.spawn(((
                         Node {
                             margin: UiRect::all(Val::Px(5.)),
                             ..default()
                         },
-                        PuzzleHintButton,
-                    ))
-                    .with_children(|p| {
-                        p.spawn((
-                            UiImage {
-                                image: asset_server.load("icons/puzzle_s.png"),
-                                flip_x: true,
-                                ..default()
-                            },
-                            Node {
-                                height: Val::Px(40.),
-                                margin: UiRect::axes(Val::Px(2.), Val::Px(5.)),
-                                ..default()
-                            },
-                        ));
-
-                        p.spawn((
-                            UiImage::new(asset_server.load("icons/puzzle_e.png")),
-                            Node {
-                                height: Val::Px(30.),
-                                margin: UiRect {
-                                    top: Val::Px(10.),
-                                    bottom: Val::Px(10.),
-
+                        EdgeHintButton,
+                    ),))
+                        .with_children(|p| {
+                            p.spawn((
+                                UiImage {
+                                    image: asset_server.load("icons/puzzle_s.png"),
+                                    flip_x: true,
                                     ..default()
                                 },
-                                ..default()
-                            },
-                            PuzzleHintChildButton,
-                        ));
+                                Node {
+                                    height: Val::Px(40.),
+                                    margin: UiRect::axes(Val::Px(2.), Val::Px(5.)),
+                                    ..default()
+                                },
+                            ));
 
-                        p.spawn((
-                            UiImage::new(asset_server.load("icons/puzzle_s.png")),
-                            Node {
-                                height: Val::Px(40.),
-                                margin: UiRect::axes(Val::Px(2.), Val::Px(5.)),
-                                ..default()
+                            p.spawn((
+                                UiImage::new(asset_server.load("icons/puzzle_e.png")),
+                                Node {
+                                    height: Val::Px(30.),
+                                    margin: UiRect {
+                                        top: Val::Px(10.),
+                                        bottom: Val::Px(10.),
+
+                                        ..default()
+                                    },
+                                    ..default()
+                                },
+                                Visibility::Visible,
+                                PuzzleHintChildButton,
+                            ));
+
+                            p.spawn((
+                                UiImage::new(asset_server.load("icons/puzzle_s.png")),
+                                Node {
+                                    height: Val::Px(40.),
+                                    margin: UiRect::axes(Val::Px(2.), Val::Px(5.)),
+                                    ..default()
+                                },
+                            ));
+                        })
+                        .observe(
+                            |_trigger: Trigger<Pointer<Click>>, mut commands: Commands| {
+                                commands.send_event(ToggleEdgeHint);
                             },
-                        ));
-                    });
+                        );
 
                     // background hint
                     p.spawn((
@@ -413,5 +421,34 @@ fn exit_fullscreen_on_esc(mut window: Single<&mut Window>, input: Res<ButtonInpu
 
     if input.just_pressed(KeyCode::Escape) {
         window.mode = WindowMode::Windowed;
+    }
+}
+
+#[derive(Event)]
+pub struct ToggleEdgeHint;
+
+fn handle_puzzle_hint(
+    mut event: EventReader<ToggleEdgeHint>,
+    mut piece_query: Query<(&Piece, &mut Visibility), Without<PuzzleHintChildButton>>,
+    mut ui: Single<&mut Visibility, With<PuzzleHintChildButton>>,
+    mut show_all: Local<bool>,
+) {
+    for _ in event.read() {
+        ui.toggle_visible_hidden();
+        if *show_all {
+            for (_, mut visibility) in piece_query.iter_mut() {
+                *visibility = Visibility::Visible;
+            }
+        } else {
+            for (piece, mut visibility) in piece_query.iter_mut() {
+                if piece.is_edge() {
+                    *visibility = Visibility::Visible;
+                } else {
+                    *visibility = Visibility::Hidden;
+                }
+            }
+        }
+
+        *show_all = !*show_all;
     }
 }
