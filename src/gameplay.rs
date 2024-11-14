@@ -27,6 +27,12 @@ pub(super) fn plugin(app: &mut App) {
         .add_observer(combine_together);
 }
 
+#[derive(Resource)]
+pub struct OriginImage {
+    pub image: Handle<Image>,
+    pub size: Vec2,
+}
+
 fn setup_generator(mut commands: Commands, asset_server: Res<AssetServer>) {
     let image_path = "raw.jpg";
     let generator = JigsawGenerator::from_path(image_path, 9, 6).expect("Failed to load image");
@@ -37,19 +43,22 @@ fn setup_generator(mut commands: Commands, asset_server: Res<AssetServer>) {
         true,
         RenderAssetUsages::RENDER_WORLD,
     );
+    let image_size = image.size_f32();
+    let image_handle = asset_server.add(image);
+    commands.insert_resource(OriginImage {
+        image: image_handle.clone(),
+        size: image_size,
+    });
 
     commands
         .spawn((
-            Sprite::from_color(
-                Color::Srgba(Srgba::new(0.0, 0.0, 0.0, 0.6)),
-                image.size_f32(),
-            ),
+            Sprite::from_color(Color::Srgba(Srgba::new(0.0, 0.0, 0.0, 0.6)), image_size),
             BoardBackgroundImage,
             Visibility::Hidden,
         ))
         .with_children(|p| {
             p.spawn((
-                Sprite::from_image(asset_server.add(image)),
+                Sprite::from_image(image_handle),
                 Transform::from_xyz(0.0, 0.0, -1.0),
             ));
         });

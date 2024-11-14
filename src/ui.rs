@@ -1,12 +1,15 @@
-use crate::gameplay::{JigsawPuzzleGenerator, MoveTogether, Selected, Shuffle};
+use crate::gameplay::{JigsawPuzzleGenerator, MoveTogether, OriginImage, Selected, Shuffle};
 use crate::Piece;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
-use bevy::window::WindowMode;
+use bevy::ui::widget::ImageMeasure;
+use bevy::ui::{ContentSize, NodeMeasure};
+use bevy::window::{PrimaryWindow, WindowMode};
+use jigsaw_puzzle_generator::imageproc::drawing::Canvas;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(Startup, setup)
-        .add_systems(Startup, setup_ui)
+        .add_systems(PostStartup, setup_ui)
         .add_event::<AdjustScale>()
         .add_event::<ToggleBackgroundHint>()
         .add_event::<TogglePuzzleHint>()
@@ -34,6 +37,8 @@ pub struct ZoomInButton;
 pub struct ZoomOutButton;
 #[derive(Component)]
 pub struct HintImageButton;
+#[derive(Component)]
+pub struct SmallHintImage;
 #[derive(Component)]
 pub struct FullscreenButton;
 #[derive(Component)]
@@ -244,22 +249,44 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                 flex_direction: FlexDirection::Column,
                 justify_content: JustifyContent::SpaceBetween,
                 align_items: AlignItems::End,
-                margin: UiRect::axes(Val::Px(15.), Val::Px(5.)),
+                margin: UiRect::axes(Val::Px(5.), Val::Px(5.)),
                 ..default()
             },
             PickingBehavior::IGNORE,
         ))
         .with_children(|builder| {
             // top right
-            builder.spawn((
-                UiImage::new(asset_server.load("icons/photo.png")),
-                Node {
-                    height: Val::Px(40.),
-                    margin: UiRect::all(Val::Px(5.)),
-                    ..default()
-                },
-                HintImageButton,
-            ));
+            builder
+                .spawn((
+                    Node {
+                        // width: Val::Px(400.),
+                        flex_direction: FlexDirection::Column,
+                        justify_content: JustifyContent::SpaceBetween,
+                        align_items: AlignItems::End,
+                        ..default()
+                    },
+                    // TopRightNode,
+                ))
+                .with_children(|p| {
+                    p.spawn((
+                        Node {
+                            width: Val::Px(400.),
+                            ..default()
+                        },
+                        SmallHintImage,
+                    ));
+                    p.spawn((
+                        Node {
+                            height: Val::Px(40.),
+                            position_type: PositionType::Absolute,
+                            ..default()
+                        },
+                        UiImage::new(asset_server.load("icons/photo.png")),
+                        HintImageButton,
+                        Visibility::Visible,
+                    ))
+                    .observe(hint_image_click);
+                });
 
             // bottom right
             builder.spawn(Node::default()).with_children(|p| {
@@ -451,4 +478,48 @@ fn handle_puzzle_hint(
 
         *show_all = !*show_all;
     }
+}
+
+fn hint_image_click(
+    _trigger: Trigger<Pointer<Click>>,
+    mut commands: Commands,
+    // top_right: Single<Entity, With<TopRightNode>>,
+    mut hint_visible: Single<
+        &mut Visibility,
+        (
+            With<HintImageButton>,
+            Without<SmallHintImage>,
+            Without<BoardBackgroundImage>,
+        ),
+    >,
+    small_hint_image: Single<Entity, With<SmallHintImage>>,
+    origin_image: Res<OriginImage>,
+) {
+    hint_visible.toggle_visible_hidden();
+    let aspect_ratio = origin_image.size.x / origin_image.size.y;
+
+    commands
+        .entity(*small_hint_image)
+        .insert((
+            UiImage::new(origin_image.image.clone()),
+            Node {
+                width: Val::Px(400.0),
+                aspect_ratio: Some(aspect_ratio),
+                ..default()
+            },
+            SmallHintImage,
+            // BackgroundColor(Color::rgba(1.0, 1.0, 0.0, 0.5)),
+            Visibility::Visible,
+        ))
+        .observe(hint_small_image_click);
+}
+
+fn hint_small_image_click(
+    _trigger: Trigger<Pointer<Click>>,
+    mut commands: Commands,
+    mut hint: Single<&mut Visibility, (With<HintImageButton>, Without<SmallHintImage>)>,
+    mut small_img: Single<Entity, (With<SmallHintImage>, Without<HintImageButton>)>,
+) {
+    **hint = Visibility::Visible;
+    commands.entity(*small_img).remove::<UiImage>();
 }
