@@ -1,13 +1,11 @@
 use crate::gameplay::{JigsawPuzzleGenerator, MoveTogether, OriginImage, Selected, Shuffle};
-use crate::Piece;
+use crate::{AppState, Piece};
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
-use bevy::ui::widget::ImageMeasure;
 use bevy::window::WindowMode;
 
 pub(super) fn plugin(app: &mut App) {
-    app.add_systems(Startup, setup)
-        .add_systems(PostStartup, setup_ui)
+    app.add_systems(OnEnter(AppState::Gameplay), setup_ui)
         .add_event::<AdjustScale>()
         .add_event::<ToggleBackgroundHint>()
         .add_event::<TogglePuzzleHint>()
@@ -49,10 +47,6 @@ pub struct EdgeHintButton;
 pub struct PuzzleHintChildButton;
 #[derive(Component)]
 pub struct BackgroundHintButton;
-
-fn setup(mut commands: Commands) {
-    commands.spawn(Camera2d);
-}
 
 #[allow(dead_code)]
 fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {

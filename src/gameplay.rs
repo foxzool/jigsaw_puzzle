@@ -1,5 +1,5 @@
 use crate::ui::BoardBackgroundImage;
-use crate::Piece;
+use crate::{AppState, Piece};
 use bevy::asset::RenderAssetUsages;
 use bevy::color::palettes::basic::YELLOW;
 use bevy::ecs::world::CommandQueue;
@@ -14,7 +14,7 @@ use log::debug;
 use rand::Rng;
 
 pub(super) fn plugin(app: &mut App) {
-    app.add_systems(Startup, setup_generator)
+    app.add_systems(OnEnter(AppState::Gameplay), setup_generator)
         .add_event::<Shuffle>()
         .add_systems(Update, (move_piece, cancel_all_move, shuffle_pieces))
         .add_systems(

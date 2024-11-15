@@ -13,3 +13,9 @@
 - [Bevy制作拼图游戏 Day 3](https://notes.zool.me/Bevy%E5%88%B6%E4%BD%9C%E6%8B%BC%E5%9B%BE%E6%B8%B8%E6%88%8F+Day+3)
 - [Bevy制作拼图游戏 Day 4](https://notes.zool.me/Bevy%E5%88%B6%E4%BD%9C%E6%8B%BC%E5%9B%BE%E6%B8%B8%E6%88%8F+Day+4)
 - [Bevy制作拼图游戏 Day 5](https://notes.zool.me/Bevy%E5%88%B6%E4%BD%9C%E6%8B%BC%E5%9B%BE%E6%B8%B8%E6%88%8F+Day+5)
+
+## 相关资源
+
+* [免费图片](https://unsplash.com/)
+* [免费图标](https://www.flaticon.com/)
+* [免费字体](https://www.fontspace.com/)
