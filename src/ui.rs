@@ -3,9 +3,7 @@ use crate::Piece;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 use bevy::ui::widget::ImageMeasure;
-use bevy::ui::{ContentSize, NodeMeasure};
-use bevy::window::{PrimaryWindow, WindowMode};
-use jigsaw_puzzle_generator::imageproc::drawing::Canvas;
+use bevy::window::WindowMode;
 
 pub(super) fn plugin(app: &mut App) {
     app.add_systems(Startup, setup)
@@ -97,14 +95,20 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                         // BackgroundColor(BLUE.into()),
                     ))
                     .with_children(|builder| {
-                        builder.spawn((
-                            UiImage::new(asset_server.load("icons/menu.png")),
-                            Node {
-                                height: Val::Px(40.),
-                                ..default()
-                            },
-                            MenuIcon,
-                        ));
+                        builder
+                            .spawn((
+                                UiImage::new(asset_server.load("icons/four-arrows.png")),
+                                Node {
+                                    height: Val::Px(40.),
+                                    ..default()
+                                },
+                                MenuIcon,
+                            ))
+                            .observe(
+                                |_trigger: Trigger<Pointer<Click>>, mut commands: Commands| {
+                                    commands.send_event(Shuffle::Edge);
+                                },
+                            );
 
                         // zoom out button
                         builder
@@ -518,7 +522,7 @@ fn hint_small_image_click(
     _trigger: Trigger<Pointer<Click>>,
     mut commands: Commands,
     mut hint: Single<&mut Visibility, (With<HintImageButton>, Without<SmallHintImage>)>,
-    mut small_img: Single<Entity, (With<SmallHintImage>, Without<HintImageButton>)>,
+    small_img: Single<Entity, (With<SmallHintImage>, Without<HintImageButton>)>,
 ) {
     **hint = Visibility::Visible;
     commands.entity(*small_img).remove::<UiImage>();
