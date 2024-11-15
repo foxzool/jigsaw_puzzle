@@ -1,4 +1,5 @@
 use crate::{despawn_screen, AppState};
+use bevy::color::palettes::basic::BLACK;
 use bevy::prelude::*;
 
 // This plugin will display a splash screen with Bevy logo for 1 second before switching to the menu
@@ -22,7 +23,13 @@ struct OnSplashScreen;
 struct SplashTimer(Timer);
 
 fn splash_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let icon = asset_server.load("puzzle.jpg");
+    let font = asset_server.load("fonts/MinecraftEvenings.ttf");
+    let text_font = TextFont {
+        font: font.clone(),
+        font_size: 50.0,
+        ..default()
+    };
+    let text_justification = JustifyText::Center;
     // Display the logo
     commands
         .spawn((
@@ -37,14 +44,27 @@ fn splash_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         ))
         .with_children(|parent| {
             parent.spawn((
-                UiImage::new(icon),
+                UiImage::new(asset_server.load("images/puzzle.jpg")),
                 Node {
-                    // This will set the logo to be 200px wide, and auto adjust its height
                     width: Val::Percent(100.0),
                     ..default()
                 },
             ));
+
+            parent.spawn((
+                Text::new("Jigsaw Puzzle"),
+                text_font.clone(),
+                TextLayout::new_with_justify(text_justification),
+                TextColor(BLACK.into()),
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(100.0),
+                    bottom: Val::Px(100.0),
+                    ..default()
+                },
+            ));
         });
+
     // Insert the timer as a resource
     commands.insert_resource(SplashTimer(Timer::from_seconds(3.0, TimerMode::Once)));
 }
@@ -56,6 +76,6 @@ fn countdown(
     mut timer: ResMut<SplashTimer>,
 ) {
     if timer.tick(time.delta()).finished() {
-        // game_state.set(AppState::MainMenu);
+        game_state.set(AppState::MainMenu);
     }
 }
