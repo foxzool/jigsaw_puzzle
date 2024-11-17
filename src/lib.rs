@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy::window::{WindowMode, WindowResolution};
 use jigsaw_puzzle_generator::JigsawPiece;
 
 mod gameplay;
