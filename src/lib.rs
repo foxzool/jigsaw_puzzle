@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use bevy::winit::WinitSettings;
 use jigsaw_puzzle_generator::JigsawPiece;
 
 mod gameplay;
@@ -27,8 +26,7 @@ impl Plugin for PuzzlePlugin {
                 }),
         )
         .insert_resource(ClearColor(Color::srgb(0.9, 0.9, 0.9)))
-        .init_state::<AppState>()
-        .insert_resource(WinitSettings::desktop_app());
+        .init_state::<AppState>();
 
         app.add_plugins(
             (
@@ -50,7 +48,7 @@ pub enum AppState {
 }
 
 fn setup_camera(mut commands: Commands) {
-    commands.spawn(Camera2d);
+    // commands.spawn(Camera2d);
 }
 
 #[derive(Debug, Component, Deref, DerefMut)]
