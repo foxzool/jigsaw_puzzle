@@ -86,16 +86,27 @@ fn splash_setup(
     // Creating the animation
     let mut animation = AnimationClip::default();
     // A curve can modify a single part of a transform: here, the translation.
-    let planet_animation_target_id = AnimationTargetId::from_name(&title);
+    let title_animation_target_id = AnimationTargetId::from_name(&title);
     animation.add_curve_to_target(
-        planet_animation_target_id,
-        UnevenSampleAutoCurve::new([0.0, 1.0, 2.0, 3.0, 4.0].into_iter().zip([
+        title_animation_target_id,
+        UnevenSampleAutoCurve::new([0.0, 1.0, 2.0, 3.0].into_iter().zip([
             Vec3::new(start_pos.0, start_pos.1, 0.0),
             Vec3::new(start_pos.0, start_pos.1 + 50.0, 0.0),
             Vec3::new(start_pos.0, start_pos.1 + 100.0, 0.0),
-            Vec3::new(start_pos.0, start_pos.1 + 150.0, 0.0),
         ]))
         .map(TranslationCurve)
+        .expect("should be able to build translation curve because we pass in valid samples"),
+    );
+
+    animation.add_curve_to_target(
+        title_animation_target_id,
+        AnimatableKeyframeCurve::new([0.0, 1.0, 2.0, 3.0].into_iter().zip([
+            Srgba::new(0.0, 0.0, 0.0, 0.1),
+            Srgba::new(0.0, 0.0, 0.0, 0.3),
+            Srgba::new(0.0, 0.0, 0.0, 0.6),
+            Srgba::new(0.0, 0.0, 0.0, 1.0),
+        ]))
+        .map(AnimatableCurve::<TextColorProperty, _>::from_curve)
         .expect("should be able to build translation curve because we pass in valid samples"),
     );
 
@@ -121,12 +132,28 @@ fn splash_setup(
         .id();
 
     commands.entity(title_id).insert(AnimationTarget {
-        id: planet_animation_target_id,
+        id: title_animation_target_id,
         player: title_id,
     });
 
     // Insert the timer as a resource
     commands.insert_resource(SplashTimer(Timer::from_seconds(3.0, TimerMode::Once)));
+}
+
+#[derive(Reflect)]
+struct TextColorProperty;
+
+impl AnimatableProperty for TextColorProperty {
+    type Component = TextColor;
+
+    type Property = Srgba;
+
+    fn get_mut(component: &mut Self::Component) -> Option<&mut Self::Property> {
+        match component.0 {
+            Color::Srgba(ref mut color) => Some(color),
+            _ => None,
+        }
+    }
 }
 
 // Tick the timer, and change state when finished
