@@ -1,6 +1,6 @@
 use crate::{despawn_screen, AnimeCamera, AppState, UiCamera, ANIMATION_LAYERS};
 use bevy::animation::{AnimationTarget, AnimationTargetId};
-use bevy::color::palettes::basic::BLACK;
+use bevy::color::palettes::basic::{BLACK, RED};
 use bevy::prelude::*;
 use bevy::render::view::RenderLayers;
 use bevy::window::WindowResized;
@@ -12,7 +12,8 @@ pub(crate) fn menu_plugin(app: &mut App) {
     )
     .add_systems(
         Update,
-        (windows_resize_event, menu_countdown).run_if(in_state(AppState::MainMenu)),
+        (windows_resize_event, menu_countdown, button_interaction)
+            .run_if(in_state(AppState::MainMenu)),
     )
     .add_systems(OnExit(AppState::MainMenu), despawn_screen::<OnGameScreen>)
     .add_observer(show_title);
@@ -151,6 +152,7 @@ fn show_title(
             title,
             AnimationGraphHandle(graphs.add(graph)),
             player,
+            OnGameScreen,
         ))
         .id();
 
@@ -219,7 +221,13 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
                         ..default()
                     },
                     TextColor(Color::BLACK),
-                ));
+                ))
+                .observe(
+                    |_trigger: Trigger<Pointer<Click>>,
+                     mut game_state: ResMut<NextState<AppState>>| {
+                        game_state.set(AppState::Gameplay)
+                    },
+                );
         })
         .id();
 
@@ -267,5 +275,32 @@ fn menu_countdown(
 ) {
     if timer.tick(time.delta()).just_finished() {
         **left = Visibility::Visible;
+    }
+}
+
+fn button_interaction(
+    mut interaction_query: Query<
+        (
+            &Interaction,
+            &mut BackgroundColor,
+            &mut BorderColor,
+            &Children,
+        ),
+        (Changed<Interaction>, With<Button>),
+    >,
+) {
+    for (interaction, mut color, mut border_color, _children) in &mut interaction_query {
+        match *interaction {
+            Interaction::Pressed => {
+                border_color.0 = RED.into();
+            }
+            Interaction::Hovered => {
+                *color = Color::srgb(0.8, 0.8, 0.8).into();
+            }
+            Interaction::None => {
+                *color = Color::srgba(0.0, 0.0, 0.0, 0.0).into();
+                border_color.0 = Color::BLACK;
+            }
+        }
     }
 }
