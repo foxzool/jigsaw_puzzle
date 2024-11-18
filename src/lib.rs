@@ -49,6 +49,9 @@ pub struct AnimeCamera(pub Entity);
 pub const UI_LAYERS: RenderLayers = RenderLayers::layer(0);
 pub const ANIMATION_LAYERS: RenderLayers = RenderLayers::layer(1);
 
+#[derive(Debug, Resource, Deref, DerefMut)]
+pub struct OriginImage(pub Handle<Image>);
+
 #[derive(Debug, Component, Deref, DerefMut)]
 pub struct Piece(pub JigsawPiece);
 

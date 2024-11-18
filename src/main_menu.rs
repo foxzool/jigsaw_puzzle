@@ -1,4 +1,4 @@
-use crate::{despawn_screen, AnimeCamera, AppState, UiCamera, ANIMATION_LAYERS};
+use crate::{despawn_screen, AnimeCamera, AppState, OriginImage, UiCamera, ANIMATION_LAYERS};
 use bevy::animation::{AnimationTarget, AnimationTargetId};
 use bevy::color::palettes::basic::{BLACK, RED};
 use bevy::prelude::*;
@@ -12,10 +12,15 @@ pub(crate) fn menu_plugin(app: &mut App) {
     )
     .add_systems(
         Update,
-        (windows_resize_event, menu_countdown, button_interaction)
+        (
+            windows_resize_event,
+            menu_countdown,
+            button_interaction,
+            show_origin_image.run_if(resource_changed::<OriginImage>),
+        )
             .run_if(in_state(AppState::MainMenu)),
     )
-    .add_systems(OnExit(AppState::MainMenu), despawn_screen::<OnGameScreen>)
+    .add_systems(OnExit(AppState::MainMenu), despawn_screen::<OnMenuScreen>)
     .add_observer(show_title);
 }
 
@@ -27,7 +32,7 @@ const PRESSED_BUTTON: Color = Color::srgb(0.35, 0.75, 0.35);
 struct TextColorProperty;
 
 #[derive(Component)]
-struct OnGameScreen;
+struct OnMenuScreen;
 
 #[derive(Resource, Deref, DerefMut)]
 struct MenuTimer(Timer);
@@ -67,7 +72,7 @@ fn setup_camera(mut commands: Commands) {
 }
 
 #[derive(Component)]
-pub struct MenuLeftColumn;
+struct HiddenItem;
 
 fn show_title(
     _trigger: Trigger<ShowTitleAnime>,
@@ -152,7 +157,7 @@ fn show_title(
             title,
             AnimationGraphHandle(graphs.add(graph)),
             player,
-            OnGameScreen,
+            OnMenuScreen,
         ))
         .id();
 
@@ -176,7 +181,7 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
             },
             UiImage::new(asset_server.load("images/puzzle.jpg")),
             TargetCamera(**ui_camera),
-            OnGameScreen,
+            OnMenuScreen,
         ))
         .id();
 
@@ -193,7 +198,7 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
             // BackgroundColor(Color::srgba(0.5, 0.0, 0.0, 0.5)),
             PickingBehavior::IGNORE,
             Visibility::Hidden,
-            MenuLeftColumn,
+            HiddenItem,
         ))
         .with_children(|parent| {
             parent
@@ -225,7 +230,7 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
                 .observe(
                     |_trigger: Trigger<Pointer<Click>>,
                      mut game_state: ResMut<NextState<AppState>>| {
-                        // game_state.set(AppState::Gameplay)
+                        game_state.set(AppState::Gameplay)
                     },
                 );
         })
@@ -241,17 +246,40 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
                 ..default()
             },
             PickingBehavior::IGNORE,
-            BackgroundColor(Color::srgba(0.5, 0.5, 0.0, 0.5)),
+            // BackgroundColor(Color::srgba(0.5, 0.1, 0.0, 0.5)),
         ))
         .with_children(|p| {
-            // p.spawn((
-            //     Node {
-            //         width: Val::Percent(100.0),
-            //         height: Val::Percent(100.0),
-            //         ..default()
-            //     },
-            //     BackgroundColor(Color::srgba(0.5, 0.5, 0.0, 0.5)),
-            // ));
+            p.spawn((Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(70.0),
+                padding: UiRect::all(Val::Px(10.0)),
+                ..default()
+            },))
+                .with_children(|p| {
+                    p.spawn((
+                        HiddenItem,
+                        Visibility::Hidden,
+                        OriginImageContainer,
+                        Node {
+                            width: Val::Percent(100.0),
+                            ..default()
+                        },
+                        Outline {
+                            width: Val::Px(5.0),
+                            color: Color::BLACK,
+                            offset: Val::Px(2.0),
+                        },
+                    ));
+                });
+
+            p.spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(30.0),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.4, 0.5, 0.5, 0.5)),
+            ));
         })
         .id();
 
@@ -268,13 +296,24 @@ fn windows_resize_event(mut commands: Commands, mut resize_events: EventReader<W
     }
 }
 
+#[derive(Component)]
+struct OriginImageContainer;
+
 fn menu_countdown(
     time: Res<Time>,
     mut timer: ResMut<MenuTimer>,
-    mut left: Single<&mut Visibility, With<MenuLeftColumn>>,
+    mut items: Query<&mut Visibility, With<HiddenItem>>,
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
 ) {
     if timer.tick(time.delta()).just_finished() {
-        **left = Visibility::Visible;
+        for mut visible in items.iter_mut() {
+            *visible = Visibility::Visible;
+        }
+
+        let image_handle = asset_server.load("../raw.jpg");
+
+        commands.insert_resource(OriginImage(image_handle));
     }
 }
 
@@ -307,4 +346,14 @@ fn button_interaction(
             }
         }
     }
+}
+
+fn show_origin_image(
+    container: Single<Entity, With<OriginImageContainer>>,
+    mut commands: Commands,
+    origin_image: Res<OriginImage>,
+) {
+    commands
+        .entity(*container)
+        .insert(UiImage::new(origin_image.0.clone()));
 }
