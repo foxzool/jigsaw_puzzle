@@ -225,7 +225,7 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
                 .observe(
                     |_trigger: Trigger<Pointer<Click>>,
                      mut game_state: ResMut<NextState<AppState>>| {
-                        game_state.set(AppState::Gameplay)
+                        // game_state.set(AppState::Gameplay)
                     },
                 );
         })
@@ -288,18 +288,22 @@ fn button_interaction(
         ),
         (Changed<Interaction>, With<Button>),
     >,
+    mut text_query: Query<&mut TextColor>,
 ) {
-    for (interaction, mut color, mut border_color, _children) in &mut interaction_query {
+    for (interaction, mut _color, mut _border_color, children) in &mut interaction_query {
+        let mut text_color = text_query.get_mut(children[0]).unwrap();
         match *interaction {
             Interaction::Pressed => {
-                border_color.0 = RED.into();
+                text_color.0 = PRESSED_BUTTON.into();
             }
             Interaction::Hovered => {
-                *color = Color::srgb(0.8, 0.8, 0.8).into();
+                // *color = Color::srgb(0.8, 0.8, 0.8).into();
+                text_color.0 = HOVERED_BUTTON.into();
             }
             Interaction::None => {
-                *color = Color::srgba(0.0, 0.0, 0.0, 0.0).into();
-                border_color.0 = Color::BLACK;
+                text_color.0 = NORMAL_BUTTON.into();
+                // *color = Color::srgba(0.0, 0.0, 0.0, 0.0).into();
+                // border_color.0 = Color::BLACK;
             }
         }
     }

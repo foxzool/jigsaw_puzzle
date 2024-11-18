@@ -4,8 +4,6 @@ use jigsaw_puzzle_generator::JigsawPiece;
 
 mod gameplay;
 mod main_menu;
-mod splash;
-mod ui;
 
 pub struct PuzzlePlugin;
 
@@ -30,18 +28,13 @@ impl Plugin for PuzzlePlugin {
         .insert_resource(ClearColor(Color::srgb(0.9, 0.9, 0.9)))
         .init_state::<AppState>();
 
-        app.add_plugins((
-            // splash::splash_plugin,
-            main_menu::menu_plugin,
-            // , ui::plugin, gameplay::plugin
-        ));
+        app.add_plugins((main_menu::menu_plugin, gameplay::plugin));
     }
 }
 
 /// The state of the application.
 #[derive(Clone, Copy, Default, Eq, PartialEq, Debug, Hash, States)]
 pub enum AppState {
-    Splash,
     #[default]
     MainMenu,
     Gameplay,
