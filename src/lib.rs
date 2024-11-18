@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy::window::{WindowMode, WindowResolution};
+use bevy::render::view::RenderLayers;
 use jigsaw_puzzle_generator::JigsawPiece;
 
 mod gameplay;
@@ -20,6 +20,7 @@ impl Plugin for PuzzlePlugin {
                         canvas: Some("#bevy".to_string()),
                         fit_canvas_to_parent: true,
                         prevent_default_event_handling: true,
+                        // mode: WindowMode::Fullscreen(MonitorSelection::Primary),
                         // resolution: WindowResolution::new(800., 600.),
                         ..Default::default()
                     }),
@@ -29,12 +30,11 @@ impl Plugin for PuzzlePlugin {
         .insert_resource(ClearColor(Color::srgb(0.9, 0.9, 0.9)))
         .init_state::<AppState>();
 
-        app.add_plugins(
-            (
-                splash::splash_plugin
-                // , ui::plugin, gameplay::plugin
-            ),
-        )
+        app.add_plugins((
+            splash::splash_plugin,
+            main_menu::menu_plugin,
+            // , ui::plugin, gameplay::plugin
+        ))
         .add_systems(Startup, setup_camera);
     }
 }
@@ -47,6 +47,15 @@ pub enum AppState {
     MainMenu,
     Gameplay,
 }
+
+#[derive(Resource, Deref)]
+pub struct UiCamera(pub Entity);
+
+#[derive(Resource, Deref)]
+pub struct AnimeCamera(pub Entity);
+
+pub const UI_LAYERS: RenderLayers = RenderLayers::layer(0);
+pub const ANIMATION_LAYERS: RenderLayers = RenderLayers::layer(1);
 
 fn setup_camera(mut commands: Commands) {
     // commands.spawn(Camera2d);
