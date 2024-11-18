@@ -31,19 +31,18 @@ impl Plugin for PuzzlePlugin {
         .init_state::<AppState>();
 
         app.add_plugins((
-            splash::splash_plugin,
+            // splash::splash_plugin,
             main_menu::menu_plugin,
             // , ui::plugin, gameplay::plugin
-        ))
-        .add_systems(Startup, setup_camera);
+        ));
     }
 }
 
 /// The state of the application.
 #[derive(Clone, Copy, Default, Eq, PartialEq, Debug, Hash, States)]
 pub enum AppState {
-    #[default]
     Splash,
+    #[default]
     MainMenu,
     Gameplay,
 }
@@ -56,10 +55,6 @@ pub struct AnimeCamera(pub Entity);
 
 pub const UI_LAYERS: RenderLayers = RenderLayers::layer(0);
 pub const ANIMATION_LAYERS: RenderLayers = RenderLayers::layer(1);
-
-fn setup_camera(mut commands: Commands) {
-    // commands.spawn(Camera2d);
-}
 
 #[derive(Debug, Component, Deref, DerefMut)]
 pub struct Piece(pub JigsawPiece);

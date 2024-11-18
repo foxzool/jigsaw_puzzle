@@ -1,11 +1,21 @@
-use crate::{AnimeCamera, AppState, UiCamera, ANIMATION_LAYERS};
+use crate::{despawn_screen, AnimeCamera, AppState, UiCamera, ANIMATION_LAYERS};
 use bevy::animation::{AnimationTarget, AnimationTargetId};
 use bevy::color::palettes::basic::BLACK;
 use bevy::prelude::*;
 use bevy::render::view::RenderLayers;
+use bevy::window::WindowResized;
 
 pub(crate) fn menu_plugin(app: &mut App) {
-    app.add_systems(OnEnter(AppState::MainMenu), (setup_title, setup_menu));
+    app.add_systems(
+        OnEnter(AppState::MainMenu),
+        (setup_camera, setup_menu).chain(),
+    )
+    .add_systems(
+        Update,
+        (windows_resize_event, menu_countdown).run_if(in_state(AppState::MainMenu)),
+    )
+    .add_systems(OnExit(AppState::MainMenu), despawn_screen::<OnGameScreen>)
+    .add_observer(show_title);
 }
 
 const NORMAL_BUTTON: Color = Color::srgb(0.15, 0.15, 0.15);
@@ -17,6 +27,12 @@ struct TextColorProperty;
 
 #[derive(Component)]
 struct OnGameScreen;
+
+#[derive(Resource, Deref, DerefMut)]
+struct MenuTimer(Timer);
+
+#[derive(Event)]
+struct ShowTitleAnime;
 
 impl AnimatableProperty for TextColorProperty {
     type Component = TextColor;
@@ -31,19 +47,47 @@ impl AnimatableProperty for TextColorProperty {
     }
 }
 
-fn setup_title(
+fn setup_camera(mut commands: Commands) {
+    let anime_camera = commands
+        .spawn((
+            Camera2d,
+            Camera {
+                order: 1,
+                ..default()
+            },
+            ANIMATION_LAYERS,
+        ))
+        .id();
+
+    commands.insert_resource(AnimeCamera(anime_camera));
+
+    let ui_camera = commands.spawn(Camera2d).id();
+    commands.insert_resource(UiCamera(ui_camera));
+}
+
+#[derive(Component)]
+pub struct MenuLeftColumn;
+
+fn show_title(
+    _trigger: Trigger<ShowTitleAnime>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut animations: ResMut<Assets<AnimationClip>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
     window: Single<&Window>,
     anime_camera: Res<AnimeCamera>,
+    old_title: Query<Entity, With<AnimationTarget>>,
 ) {
     println!(
         "Setting up menu screen {}x{}",
         window.width(),
         window.height()
     );
+
+    for entity in old_title.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+
     let font = asset_server.load("fonts/MinecraftEvenings.ttf");
     let text_font = TextFont {
         font: font.clone(),
@@ -65,7 +109,8 @@ fn setup_title(
     let title_animation_target_id = AnimationTargetId::from_name(&title);
     animation.add_curve_to_target(
         title_animation_target_id,
-        UnevenSampleAutoCurve::new([0.0, 1.0, 2.0, 3.0].into_iter().zip([
+        UnevenSampleAutoCurve::new([0.0, 0.5, 1.0, 2.0, 3.0].into_iter().zip([
+            Vec3::new(start_pos.0, start_pos.1, 0.0),
             Vec3::new(start_pos.0, start_pos.1, 0.0),
             Vec3::new(start_pos.0, start_pos.1 + 50.0, 0.0),
             Vec3::new(start_pos.0, start_pos.1 + 100.0, 0.0),
@@ -101,8 +146,8 @@ fn setup_title(
             TextColor(BLACK.into()),
             ANIMATION_LAYERS,
             TargetCamera(**anime_camera),
-            // Transform::from_xyz(start_pos.0, start_pos.1, 0.0),
-            Transform::from_xyz(0.0, 0.0, 0.0),
+            Transform::from_xyz(start_pos.0, start_pos.1, 0.0),
+            // Transform::from_xyz(0.0, 0.0, 0.0),
             title,
             AnimationGraphHandle(graphs.add(graph)),
             player,
@@ -127,6 +172,7 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
                 justify_content: JustifyContent::SpaceBetween,
                 ..default()
             },
+            UiImage::new(asset_server.load("images/puzzle.jpg")),
             TargetCamera(**ui_camera),
             OnGameScreen,
         ))
@@ -142,8 +188,10 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
                 justify_content: JustifyContent::Center,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.5, 0.0, 0.0, 0.5)),
+            // BackgroundColor(Color::srgba(0.5, 0.0, 0.0, 0.5)),
             PickingBehavior::IGNORE,
+            Visibility::Hidden,
+            MenuLeftColumn,
         ))
         .with_children(|parent| {
             parent
@@ -202,4 +250,22 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
     commands
         .entity(root_node)
         .add_children(&[left_column, right_column]);
+
+    commands.insert_resource(MenuTimer(Timer::from_seconds(2.9, TimerMode::Once)));
+}
+
+fn windows_resize_event(mut commands: Commands, mut resize_events: EventReader<WindowResized>) {
+    for _ev in resize_events.read() {
+        commands.trigger(ShowTitleAnime);
+    }
+}
+
+fn menu_countdown(
+    time: Res<Time>,
+    mut timer: ResMut<MenuTimer>,
+    mut left: Single<&mut Visibility, With<MenuLeftColumn>>,
+) {
+    if timer.tick(time.delta()).just_finished() {
+        **left = Visibility::Visible;
+    }
 }
