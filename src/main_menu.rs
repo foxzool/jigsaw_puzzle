@@ -3,6 +3,7 @@ use bevy::animation::{AnimationTarget, AnimationTargetId};
 use bevy::color::palettes::basic::{BLACK, RED};
 use bevy::prelude::*;
 use bevy::render::view::RenderLayers;
+use bevy::ui::NodeType::Rect;
 use bevy::window::WindowResized;
 
 pub(crate) fn menu_plugin(app: &mut App) {
@@ -168,6 +169,10 @@ fn show_title(
 }
 
 fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera: Res<UiCamera>) {
+    let text_font = asset_server.load("fonts/FiraSans-Bold.ttf");
+    // let title_font = asset_server.load("fonts/MinecraftEvenings.ttf");
+    let down_arrow = asset_server.load("icons/down-arrow.png");
+
     // Display the logo
     let root_node = commands
         .spawn((
@@ -190,19 +195,158 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
             Node {
                 width: Val::Percent(40.),
                 height: Val::Percent(100.0),
-                // flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
+                display: Display::Flex,
+                flex_direction: FlexDirection::Column,
                 ..default()
             },
             // BackgroundColor(Color::srgba(0.5, 0.0, 0.0, 0.5)),
             PickingBehavior::IGNORE,
-            Visibility::Hidden,
+            // Visibility::Hidden,
             HiddenItem,
         ))
-        .with_children(|parent| {
-            parent
-                .spawn((
+        .with_children(|p| {
+            // top container holder
+            p.spawn(Node {
+                height: Val::Percent(45.0),
+                ..default()
+            });
+            // bottom container
+            p.spawn((
+                Node {
+                    height: Val::Percent(55.0),
+                    // width: Val::Px(300.0),
+                    display: Display::Flex,
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    // justify_content: JustifyContent::SpaceBetween,
+                    ..default()
+                },
+                // BackgroundColor(Color::srgba(0.5, 0.0, 0.0, 0.5)),
+            ))
+            .with_children(|p| {
+                // selector container
+                p.spawn((
+                    Node {
+                        // width: Val::Percent(100.0),
+                        height: Val::Px(100.0),
+                        justify_content: JustifyContent::SpaceBetween,
+                        ..default()
+                    },
+                    // BackgroundColor(Color::srgba(0.5, 0.0, 0.0, 0.5)),
+                ))
+                .with_children(|p| {
+                    // piece selection
+                    p.spawn(
+                        (Node {
+                            height: Val::Percent(100.0),
+                            justify_content: JustifyContent::SpaceBetween,
+                            display: Display::Flex,
+                            flex_direction: FlexDirection::Column,
+                            align_items: AlignItems::Center,
+                            ..default()
+                        }),
+                    )
+                    .with_children(|p| {
+                        p.spawn((
+                            UiImage {
+                                image: down_arrow.clone(),
+                                flip_y: true,
+                                ..default()
+                            },
+                            Node {
+                                width: Val::Px(30.0),
+                                height: Val::Px(30.0),
+                                ..default()
+                            },
+                        ));
+                        p.spawn((
+                            Text::new("20"),
+                            TextFont {
+                                font: text_font.clone(),
+                                font_size: 28.0,
+                                ..default()
+                            },
+                            TextColor(Color::BLACK),
+                            Node {
+                                margin: UiRect::axes(Val::Px(10.0), Val::Px(0.0)),
+                                ..default()
+                            },
+                        ));
+                        p.spawn((
+                            UiImage::new(down_arrow.clone()),
+                            Node {
+                                width: Val::Px(30.0),
+                                height: Val::Px(30.0),
+                                ..default()
+                            },
+                        ));
+                    });
+
+                    // text
+                    p.spawn((
+                        Text::new("pieces"),
+                        TextFont {
+                            font: text_font.clone(),
+                            font_size: 28.0,
+                            ..default()
+                        },
+                        TextColor(Color::BLACK),
+                        Node {
+                            margin: UiRect::axes(Val::Px(0.0), Val::Px(31.0)),
+                            ..default()
+                        },
+                    ));
+
+                    // mode selection
+                    p.spawn(
+                        (Node {
+                            height: Val::Percent(100.0),
+                            justify_content: JustifyContent::SpaceBetween,
+                            display: Display::Flex,
+                            flex_direction: FlexDirection::Column,
+                            align_items: AlignItems::Center,
+                            ..default()
+                        }),
+                    )
+                    .with_children(|p| {
+                        p.spawn((
+                            UiImage {
+                                image: down_arrow.clone(),
+                                flip_y: true,
+                                ..default()
+                            },
+                            Node {
+                                width: Val::Px(30.0),
+                                height: Val::Px(30.0),
+                                ..default()
+                            },
+                        ));
+                        p.spawn((
+                            Text::new("Classic"),
+                            TextFont {
+                                font: text_font.clone(),
+                                font_size: 28.0,
+                                ..default()
+                            },
+                            TextColor(Color::BLACK),
+                            Node {
+                                margin: UiRect::axes(Val::Px(10.0), Val::Px(0.0)),
+                                ..default()
+                            },
+                        ));
+                        p.spawn((
+                            UiImage::new(down_arrow.clone()),
+                            Node {
+                                width: Val::Px(30.0),
+                                height: Val::Px(30.0),
+                                ..default()
+                            },
+                        ));
+                    });
+                });
+
+                // start button
+                p.spawn((
                     Button,
                     BorderColor(Color::BLACK),
                     BorderRadius::MAX,
@@ -214,6 +358,7 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
                         justify_content: JustifyContent::Center,
                         // vertically center child text
                         align_items: AlignItems::Center,
+                        margin: UiRect::all(Val::Px(20.0)),
                         ..default()
                     },
                     // BackgroundColor(NORMAL_BUTTON),
@@ -221,7 +366,7 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
                 .with_child((
                     Text::new("Start"),
                     TextFont {
-                        font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                        font: text_font.clone(),
                         font_size: 33.0,
                         ..default()
                     },
@@ -233,6 +378,7 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
                         game_state.set(AppState::Gameplay)
                     },
                 );
+            });
         })
         .id();
 
@@ -249,6 +395,7 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
             // BackgroundColor(Color::srgba(0.5, 0.1, 0.0, 0.5)),
         ))
         .with_children(|p| {
+            // image preview
             p.spawn((Node {
                 width: Val::Percent(100.0),
                 height: Val::Percent(70.0),
@@ -272,14 +419,33 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
                     ));
                 });
 
+            // game mode selection
             p.spawn((
                 Node {
                     width: Val::Percent(100.0),
                     height: Val::Percent(30.0),
+                    display: Display::Flex,
+                    justify_content: JustifyContent::SpaceBetween,
+                    margin: UiRect {
+                        left: Val::Px(4.),
+                        ..default()
+                    },
+                    padding: UiRect::all(Val::Px(30.)),
                     ..default()
                 },
-                BackgroundColor(Color::srgba(0.4, 0.5, 0.5, 0.5)),
-            ));
+                // BackgroundColor(Color::srgba(0.4, 0.5, 0.5, 0.5)),
+            ))
+            .with_children(|p| {
+                // piece selection
+                p.spawn((
+                    Node {
+                        width: Val::Percent(40.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.2, 0.7, 0.5, 0.5)),
+                ));
+            });
         })
         .id();
 
@@ -329,7 +495,7 @@ fn button_interaction(
     >,
     mut text_query: Query<&mut TextColor>,
 ) {
-    for (interaction, mut _color, mut _border_color, children) in &mut interaction_query {
+    for (interaction, _color, _border_color, children) in &mut interaction_query {
         let mut text_color = text_query.get_mut(children[0]).unwrap();
         match *interaction {
             Interaction::Pressed => {
@@ -356,4 +522,17 @@ fn show_origin_image(
     commands
         .entity(*container)
         .insert(UiImage::new(origin_image.0.clone()));
+}
+
+#[derive(Resource, Default, Clone, Copy, Debug)]
+enum SelectPiece {
+    #[default]
+    P20,
+    P50,
+    P100,
+    P150,
+    P200,
+    P250,
+    P300,
+    P400,
 }

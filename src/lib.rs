@@ -40,6 +40,15 @@ pub enum AppState {
     Gameplay,
 }
 
+/// The state of the game.
+#[derive(Clone, Copy, Default, Eq, PartialEq, Debug, Hash, States)]
+pub enum GameState {
+    #[default]
+    Playing,
+    Paused,
+    GameOver,
+}
+
 #[derive(Resource, Deref)]
 pub struct UiCamera(pub Entity);
 

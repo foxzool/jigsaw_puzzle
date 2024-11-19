@@ -25,6 +25,13 @@ const DEFAULT_JITTER: f32 = 5.0;
 const MAX_WIDTH: u32 = 1920;
 const MAX_HEIGHT: u32 = 1200;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum GameMode {
+    #[default]
+    Classic,
+    Square,
+}
+
 /// A segment of an indented puzzle piece edge. A segment is described by a cubic Bézier curve,
 /// which includes a starting point, an end point and two control points. Three segments make up a
 /// piece's edge.
@@ -611,7 +618,7 @@ impl JigsawGenerator {
         self.pieces_in_column * self.pieces_in_row
     }
 
-    pub fn generate(&self, resize: bool) -> Result<JigsawTemplate> {
+    pub fn generate(&self, game_mode: GameMode, resize: bool) -> Result<JigsawTemplate> {
         let target_image = if resize {
             scale_image(&self.origin_image)
         } else {

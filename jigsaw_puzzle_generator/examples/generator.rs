@@ -1,5 +1,5 @@
 use env_logger::{Builder, Env};
-use jigsaw_puzzle_generator::JigsawGenerator;
+use jigsaw_puzzle_generator::{GameMode, JigsawGenerator};
 use std::env;
 use std::fs::create_dir_all;
 
@@ -12,7 +12,7 @@ fn main() {
     let image_path = env::args().nth(1).unwrap_or("raw.jpg".to_string());
     let template = JigsawGenerator::from_path(&image_path, 9, 6)
         .expect("Failed to load image")
-        .generate(false)
+        .generate(GameMode::Classic, false)
         .expect("Failed to generate puzzle");
     create_dir_all("images").expect("Failed to create images directory");
     template

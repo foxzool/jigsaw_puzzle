@@ -10,7 +10,7 @@ use bevy::tasks::{block_on, AsyncComputeTaskPool, Task};
 use bevy::utils::HashSet;
 use bevy::window::WindowMode;
 use jigsaw_puzzle_generator::image::GenericImageView;
-use jigsaw_puzzle_generator::{JigsawGenerator, JigsawPiece};
+use jigsaw_puzzle_generator::{GameMode, JigsawGenerator, JigsawPiece};
 use log::debug;
 use rand::Rng;
 
@@ -107,7 +107,7 @@ struct ColorImage;
 
 /// Spawn the pieces of the jigsaw puzzle
 fn spawn_piece(mut commands: Commands, generator: Res<JigsawPuzzleGenerator>) {
-    if let Ok(template) = generator.generate(false) {
+    if let Ok(template) = generator.generate(GameMode::Classic, false) {
         let thread_pool = AsyncComputeTaskPool::get();
         for piece in template.pieces.iter() {
             let template_clone = template.clone();
