@@ -5,6 +5,7 @@ use crate::{
 use bevy::animation::{AnimationTarget, AnimationTargetId};
 use bevy::color::palettes::basic::BLACK;
 use bevy::prelude::*;
+use bevy::ui::ContentSize;
 use bevy::window::WindowResized;
 
 pub(crate) fn menu_plugin(app: &mut App) {
@@ -671,10 +672,30 @@ fn drag_end(_trigger: Trigger<Pointer<DragEnd>>, mut dragging: ResMut<Dragging>)
 
 fn drag_images_collection(
     trigger: Trigger<Pointer<Drag>>,
-    mut container: Single<&mut Node, With<ImagesContainer>>,
+    mut container: Single<(&mut Node, &ComputedNode, &Children), With<ImagesContainer>>,
+    compute_node: Query<&ComputedNode>,
 ) {
+    let (mut container, current_node, children) = container.into_inner();
     let Val::Px(px) = container.left else {
         return;
     };
-    container.left = Val::Px(px + trigger.event.delta.x);
+
+    let child_node = compute_node.get(*children.first().unwrap()).unwrap();
+    let child_width = child_node.size().x;
+
+    let min_x = -(current_node.size().x + child_width / 2.0);
+    let max_x = current_node.size().x - child_width;
+    let new_left = px + trigger.event.delta.x;
+
+    if new_left < min_x {
+        container.left = Val::Px(min_x);
+        return;
+    }
+
+    if new_left > max_x {
+        container.left = Val::Px(max_x);
+        return;
+    }
+
+    container.left = Val::Px(new_left);
 }
