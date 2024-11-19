@@ -9,6 +9,7 @@ use bevy::window::WindowResized;
 
 pub(crate) fn menu_plugin(app: &mut App) {
     app.init_resource::<LoadedImages>()
+        .init_resource::<Dragging>()
         .add_systems(
             OnEnter(AppState::MainMenu),
             (setup_camera, setup_menu, load_default_images).chain(),
@@ -466,20 +467,35 @@ fn setup_menu(
                 Node {
                     width: Val::Percent(100.0),
                     height: Val::Percent(30.0),
-                    display: Display::Flex,
-                    justify_content: JustifyContent::SpaceBetween,
-                    margin: UiRect {
-                        left: Val::Px(4.),
-                        ..default()
-                    },
-                    padding: UiRect::all(Val::Px(30.)),
+                    // display: Display::Flex,
+                    // justify_content: JustifyContent::SpaceBetween,
+                    // padding: UiRect::all(Val::Px(30.)),
+                    overflow: Overflow::clip(),
                     ..default()
                 },
-                Visibility::Hidden,
-                HiddenItem,
-                ImagesContainer,
-                // BackgroundColor(Color::srgba(0.4, 0.5, 0.5, 0.5)),
-            ));
+                // BackgroundColor(Color::srgba(0.7, 0.1, 0.5, 0.5)),
+            ))
+            .with_children(|p| {
+                p.spawn((
+                    Node {
+                        width: Val::Percent(100.0),
+                        height: Val::Percent(80.0),
+                        display: Display::Flex,
+                        justify_content: JustifyContent::SpaceBetween,
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(0.0),
+                        margin: UiRect::all(Val::Px(30.)),
+                        ..default()
+                    },
+                    // BackgroundColor(Color::srgba(0.4, 0.5, 0.5, 0.5)),
+                    ImagesContainer,
+                    Visibility::Hidden,
+                    HiddenItem,
+                ))
+                .observe(drag_start)
+                .observe(drag_end)
+                .observe(drag_images_collection);
+            });
         })
         .id();
 
@@ -502,7 +518,13 @@ struct OriginImageContainer;
 #[derive(Component)]
 struct ImagesContainer;
 
-const IMAGE_PATHS: [&str; 2] = ["../raw.jpg", "../rock.jpg"];
+const IMAGE_PATHS: [&str; 5] = [
+    "images/raw.jpg",
+    "images/rock.jpg",
+    "images/mount.jpg",
+    "images/sea.jpg",
+    "images/docker.jpg",
+];
 
 #[derive(Resource, Default, Deref, DerefMut)]
 pub struct LoadedImages(Vec<Handle<Image>>);
@@ -583,16 +605,24 @@ fn show_images(
         let child_node = commands
             .spawn((
                 UiImage::new(image.clone()),
-                Outline {
-                    width: Val::Px(2.0),
-                    color: Color::BLACK,
-                    offset: Val::Px(0.0),
+                Node {
+                    margin: UiRect::axes(Val::Px(10.0), Val::Px(0.0)),
+                    ..default()
                 },
+                // Outline {
+                //     width: Val::Px(2.0),
+                //     color: Color::BLACK,
+                //     offset: Val::Px(0.0),
+                // },
             ))
             .observe(
                 |trigger: Trigger<Pointer<Click>>,
                  mut origin_image: ResMut<OriginImage>,
+                 dragging: Res<Dragging>,
                  image_query: Query<&UiImage>| {
+                    if dragging.0 {
+                        return;
+                    }
                     let image = image_query.get(trigger.entity()).unwrap();
                     origin_image.0 = image.image.clone();
                 },
@@ -626,4 +656,25 @@ fn update_piece_text(
     for mut text in piece_query.iter_mut() {
         text.0 = select_piece.to_string();
     }
+}
+
+#[derive(Resource, Default)]
+struct Dragging(bool);
+
+fn drag_start(_trigger: Trigger<Pointer<DragStart>>, mut dragging: ResMut<Dragging>) {
+    dragging.0 = true;
+}
+
+fn drag_end(_trigger: Trigger<Pointer<DragEnd>>, mut dragging: ResMut<Dragging>) {
+    dragging.0 = false;
+}
+
+fn drag_images_collection(
+    trigger: Trigger<Pointer<Drag>>,
+    mut container: Single<&mut Node, With<ImagesContainer>>,
+) {
+    let Val::Px(px) = container.left else {
+        return;
+    };
+    container.left = Val::Px(px + trigger.event.delta.x);
 }
