@@ -618,7 +618,7 @@ impl JigsawGenerator {
         self.pieces_in_column * self.pieces_in_row
     }
 
-    pub fn generate(&self, game_mode: GameMode, resize: bool) -> Result<JigsawTemplate> {
+    pub fn generate(&self, _game_mode: GameMode, resize: bool) -> Result<JigsawTemplate> {
         let target_image = if resize {
             scale_image(&self.origin_image)
         } else {

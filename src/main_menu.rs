@@ -1,6 +1,9 @@
-use crate::{despawn_screen, AnimeCamera, AppState, OriginImage, UiCamera, ANIMATION_LAYERS};
+use crate::{
+    despawn_screen, AnimeCamera, AppState, OriginImage, SelectGameMode, SelectPiece, UiCamera,
+    ANIMATION_LAYERS,
+};
 use bevy::animation::{AnimationTarget, AnimationTargetId};
-use bevy::color::palettes::basic::{BLACK, RED};
+use bevy::color::palettes::basic::BLACK;
 use bevy::prelude::*;
 use bevy::render::view::RenderLayers;
 use bevy::ui::NodeType::Rect;
@@ -18,6 +21,8 @@ pub(crate) fn menu_plugin(app: &mut App) {
             menu_countdown,
             button_interaction,
             show_origin_image.run_if(resource_changed::<OriginImage>),
+            update_piece_text.run_if(resource_changed::<SelectPiece>),
+            update_game_mode_text.run_if(resource_changed::<SelectGameMode>),
         )
             .run_if(in_state(AppState::MainMenu)),
     )
@@ -168,7 +173,13 @@ fn show_title(
     });
 }
 
-fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera: Res<UiCamera>) {
+fn setup_menu(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    ui_camera: Res<UiCamera>,
+    select_piece: Res<SelectPiece>,
+    select_mode: Res<SelectGameMode>,
+) {
     let text_font = asset_server.load("fonts/FiraSans-Bold.ttf");
     // let title_font = asset_server.load("fonts/MinecraftEvenings.ttf");
     let down_arrow = asset_server.load("icons/down-arrow.png");
@@ -247,6 +258,7 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
                         }),
                     )
                     .with_children(|p| {
+                        // up arrow
                         p.spawn((
                             UiImage {
                                 image: down_arrow.clone(),
@@ -258,9 +270,16 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
                                 height: Val::Px(30.0),
                                 ..default()
                             },
-                        ));
+                        ))
+                        .observe(
+                            |_trigger: Trigger<Pointer<Click>>,
+                             mut select_piece: ResMut<SelectPiece>| {
+                                select_piece.previous();
+                            },
+                        );
                         p.spawn((
-                            Text::new("20"),
+                            PieceNumText,
+                            Text::new(select_piece.to_string()),
                             TextFont {
                                 font: text_font.clone(),
                                 font_size: 28.0,
@@ -272,6 +291,7 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
                                 ..default()
                             },
                         ));
+                        // down arrow
                         p.spawn((
                             UiImage::new(down_arrow.clone()),
                             Node {
@@ -279,7 +299,13 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
                                 height: Val::Px(30.0),
                                 ..default()
                             },
-                        ));
+                        ))
+                        .observe(
+                            |_trigger: Trigger<Pointer<Click>>,
+                             mut select_piece: ResMut<SelectPiece>| {
+                                select_piece.next();
+                            },
+                        );
                     });
 
                     // text
@@ -309,6 +335,7 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
                         }),
                     )
                     .with_children(|p| {
+                        // up arrow
                         p.spawn((
                             UiImage {
                                 image: down_arrow.clone(),
@@ -320,9 +347,16 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
                                 height: Val::Px(30.0),
                                 ..default()
                             },
-                        ));
+                        ))
+                        .observe(
+                            |_trigger: Trigger<Pointer<Click>>,
+                             mut select_mode: ResMut<SelectGameMode>| {
+                                select_mode.previous();
+                            },
+                        );
                         p.spawn((
-                            Text::new("Classic"),
+                            GameModeText,
+                            Text::new(select_mode.to_string()),
                             TextFont {
                                 font: text_font.clone(),
                                 font_size: 28.0,
@@ -334,6 +368,7 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
                                 ..default()
                             },
                         ));
+                        // down arrow
                         p.spawn((
                             UiImage::new(down_arrow.clone()),
                             Node {
@@ -341,7 +376,13 @@ fn setup_menu(mut commands: Commands, asset_server: Res<AssetServer>, ui_camera:
                                 height: Val::Px(30.0),
                                 ..default()
                             },
-                        ));
+                        ))
+                        .observe(
+                            |_trigger: Trigger<Pointer<Click>>,
+                             mut select_mode: ResMut<SelectGameMode>| {
+                                select_mode.next();
+                            },
+                        );
                     });
                 });
 
@@ -524,15 +565,27 @@ fn show_origin_image(
         .insert(UiImage::new(origin_image.0.clone()));
 }
 
-#[derive(Resource, Default, Clone, Copy, Debug)]
-enum SelectPiece {
-    #[default]
-    P20,
-    P50,
-    P100,
-    P150,
-    P200,
-    P250,
-    P300,
-    P400,
+#[derive(Component)]
+struct PieceNumText;
+
+#[derive(Component)]
+struct GameModeText;
+
+fn update_game_mode_text(
+    select_mode: Res<SelectGameMode>,
+
+    mut mode_query: Query<&mut Text, With<GameModeText>>,
+) {
+    for mut text in mode_query.iter_mut() {
+        text.0 = select_mode.to_string();
+    }
+}
+
+fn update_piece_text(
+    select_piece: Res<SelectPiece>,
+    mut piece_query: Query<&mut Text, With<PieceNumText>>,
+) {
+    for mut text in piece_query.iter_mut() {
+        text.0 = select_piece.to_string();
+    }
 }
