@@ -5,29 +5,29 @@ use crate::{
 use bevy::animation::{AnimationTarget, AnimationTargetId};
 use bevy::color::palettes::basic::BLACK;
 use bevy::prelude::*;
-use bevy::render::view::RenderLayers;
-use bevy::ui::NodeType::Rect;
 use bevy::window::WindowResized;
 
 pub(crate) fn menu_plugin(app: &mut App) {
-    app.add_systems(
-        OnEnter(AppState::MainMenu),
-        (setup_camera, setup_menu).chain(),
-    )
-    .add_systems(
-        Update,
-        (
-            windows_resize_event,
-            menu_countdown,
-            button_interaction,
-            show_origin_image.run_if(resource_changed::<OriginImage>),
-            update_piece_text.run_if(resource_changed::<SelectPiece>),
-            update_game_mode_text.run_if(resource_changed::<SelectGameMode>),
+    app.init_resource::<LoadedImages>()
+        .add_systems(
+            OnEnter(AppState::MainMenu),
+            (setup_camera, setup_menu, load_default_images).chain(),
         )
-            .run_if(in_state(AppState::MainMenu)),
-    )
-    .add_systems(OnExit(AppState::MainMenu), despawn_screen::<OnMenuScreen>)
-    .add_observer(show_title);
+        .add_systems(
+            Update,
+            (
+                windows_resize_event,
+                menu_countdown,
+                button_interaction,
+                show_origin_image.run_if(resource_changed::<OriginImage>),
+                update_piece_text.run_if(resource_changed::<SelectPiece>),
+                update_game_mode_text.run_if(resource_changed::<SelectGameMode>),
+                show_images.run_if(resource_changed::<LoadedImages>),
+            )
+                .run_if(in_state(AppState::MainMenu)),
+        )
+        .add_systems(OnExit(AppState::MainMenu), despawn_screen::<OnMenuScreen>)
+        .add_observer(show_title);
 }
 
 const NORMAL_BUTTON: Color = Color::srgb(0.15, 0.15, 0.15);
@@ -123,9 +123,9 @@ fn show_title(
         title_animation_target_id,
         UnevenSampleAutoCurve::new([0.0, 0.5, 1.0, 2.0, 3.0].into_iter().zip([
             Vec3::new(start_pos.0, start_pos.1, 0.0),
-            Vec3::new(start_pos.0, start_pos.1, 0.0),
             Vec3::new(start_pos.0, start_pos.1 + 50.0, 0.0),
             Vec3::new(start_pos.0, start_pos.1 + 100.0, 0.0),
+            Vec3::new(start_pos.0, start_pos.1 + 150.0, 0.0),
         ]))
         .map(TranslationCurve)
         .expect("should be able to build translation curve because we pass in valid samples"),
@@ -212,7 +212,7 @@ fn setup_menu(
             },
             // BackgroundColor(Color::srgba(0.5, 0.0, 0.0, 0.5)),
             PickingBehavior::IGNORE,
-            // Visibility::Hidden,
+            Visibility::Hidden,
             HiddenItem,
         ))
         .with_children(|p| {
@@ -230,9 +230,14 @@ fn setup_menu(
                     flex_direction: FlexDirection::Column,
                     align_items: AlignItems::Center,
                     // justify_content: JustifyContent::SpaceBetween,
+                    padding: UiRect {
+                        top: Val::Px(70.0),
+                        ..default()
+                    },
                     ..default()
                 },
                 // BackgroundColor(Color::srgba(0.5, 0.0, 0.0, 0.5)),
+                BackgroundColor(Color::srgba(0.2, 0.7, 0.5, 0.5)),
             ))
             .with_children(|p| {
                 // selector container
@@ -247,16 +252,14 @@ fn setup_menu(
                 ))
                 .with_children(|p| {
                     // piece selection
-                    p.spawn(
-                        (Node {
-                            height: Val::Percent(100.0),
-                            justify_content: JustifyContent::SpaceBetween,
-                            display: Display::Flex,
-                            flex_direction: FlexDirection::Column,
-                            align_items: AlignItems::Center,
-                            ..default()
-                        }),
-                    )
+                    p.spawn(Node {
+                        height: Val::Percent(100.0),
+                        justify_content: JustifyContent::SpaceBetween,
+                        display: Display::Flex,
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    })
                     .with_children(|p| {
                         // up arrow
                         p.spawn((
@@ -324,16 +327,14 @@ fn setup_menu(
                     ));
 
                     // mode selection
-                    p.spawn(
-                        (Node {
-                            height: Val::Percent(100.0),
-                            justify_content: JustifyContent::SpaceBetween,
-                            display: Display::Flex,
-                            flex_direction: FlexDirection::Column,
-                            align_items: AlignItems::Center,
-                            ..default()
-                        }),
-                    )
+                    p.spawn(Node {
+                        height: Val::Percent(100.0),
+                        justify_content: JustifyContent::SpaceBetween,
+                        display: Display::Flex,
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    })
                     .with_children(|p| {
                         // up arrow
                         p.spawn((
@@ -453,14 +454,14 @@ fn setup_menu(
                             ..default()
                         },
                         Outline {
-                            width: Val::Px(5.0),
+                            width: Val::Px(3.0),
                             color: Color::BLACK,
                             offset: Val::Px(2.0),
                         },
                     ));
                 });
 
-            // game mode selection
+            // images collection container
             p.spawn((
                 Node {
                     width: Val::Percent(100.0),
@@ -474,19 +475,11 @@ fn setup_menu(
                     padding: UiRect::all(Val::Px(30.)),
                     ..default()
                 },
+                Visibility::Hidden,
+                HiddenItem,
+                ImagesContainer,
                 // BackgroundColor(Color::srgba(0.4, 0.5, 0.5, 0.5)),
-            ))
-            .with_children(|p| {
-                // piece selection
-                p.spawn((
-                    Node {
-                        width: Val::Percent(40.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgba(0.2, 0.7, 0.5, 0.5)),
-                ));
-            });
+            ));
         })
         .id();
 
@@ -506,21 +499,37 @@ fn windows_resize_event(mut commands: Commands, mut resize_events: EventReader<W
 #[derive(Component)]
 struct OriginImageContainer;
 
+#[derive(Component)]
+struct ImagesContainer;
+
+const IMAGE_PATHS: [&str; 2] = ["../raw.jpg", "../rock.jpg"];
+
+#[derive(Resource, Default, Deref, DerefMut)]
+pub struct LoadedImages(Vec<Handle<Image>>);
+
+fn load_default_images(asset_server: Res<AssetServer>, mut loaded_images: ResMut<LoadedImages>) {
+    for path in IMAGE_PATHS {
+        let image_handle = asset_server.load(path);
+
+        loaded_images.0.push(image_handle);
+    }
+}
+
 fn menu_countdown(
     time: Res<Time>,
     mut timer: ResMut<MenuTimer>,
     mut items: Query<&mut Visibility, With<HiddenItem>>,
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
+    image_handle: Res<LoadedImages>,
 ) {
     if timer.tick(time.delta()).just_finished() {
         for mut visible in items.iter_mut() {
             *visible = Visibility::Visible;
         }
 
-        let image_handle = asset_server.load("../raw.jpg");
+        let image_handle = image_handle.0.first().unwrap();
 
-        commands.insert_resource(OriginImage(image_handle));
+        commands.insert_resource(OriginImage(image_handle.clone()));
     }
 }
 
@@ -563,6 +572,35 @@ fn show_origin_image(
     commands
         .entity(*container)
         .insert(UiImage::new(origin_image.0.clone()));
+}
+
+fn show_images(
+    container: Single<Entity, With<ImagesContainer>>,
+    mut commands: Commands,
+    loaded_images: Res<LoadedImages>,
+) {
+    for image in loaded_images.0.iter() {
+        let child_node = commands
+            .spawn((
+                UiImage::new(image.clone()),
+                Outline {
+                    width: Val::Px(2.0),
+                    color: Color::BLACK,
+                    offset: Val::Px(0.0),
+                },
+            ))
+            .observe(
+                |trigger: Trigger<Pointer<Click>>,
+                 mut origin_image: ResMut<OriginImage>,
+                 image_query: Query<&UiImage>| {
+                    let image = image_query.get(trigger.entity()).unwrap();
+                    origin_image.0 = image.image.clone();
+                },
+            )
+            .id();
+
+        commands.entity(*container).add_child(child_node);
+    }
 }
 
 #[derive(Component)]
