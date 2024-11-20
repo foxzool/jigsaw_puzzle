@@ -54,12 +54,8 @@ pub enum GameState {
 }
 
 #[derive(Resource, Deref)]
-pub struct UiCamera(pub Entity);
-
-#[derive(Resource, Deref)]
 pub struct AnimeCamera(pub Entity);
 
-pub const UI_LAYERS: RenderLayers = RenderLayers::layer(0);
 pub const ANIMATION_LAYERS: RenderLayers = RenderLayers::layer(1);
 
 #[derive(Debug, Resource, Deref, DerefMut)]
@@ -86,6 +82,7 @@ enum SelectPiece {
     P250,
     P300,
     P400,
+    P500,
 }
 
 impl fmt::Display for SelectPiece {
@@ -102,6 +99,7 @@ impl fmt::Display for SelectPiece {
                 SelectPiece::P250 => 250,
                 SelectPiece::P300 => 300,
                 SelectPiece::P400 => 400,
+                SelectPiece::P500 => 500,
             }
         )
     }
@@ -117,13 +115,14 @@ impl SelectPiece {
             SelectPiece::P200 => SelectPiece::P250,
             SelectPiece::P250 => SelectPiece::P300,
             SelectPiece::P300 => SelectPiece::P400,
-            SelectPiece::P400 => SelectPiece::P20,
+            SelectPiece::P400 => SelectPiece::P500,
+            SelectPiece::P500 => SelectPiece::P20,
         };
     }
 
     fn previous(&mut self) {
         *self = match self {
-            SelectPiece::P20 => SelectPiece::P400,
+            SelectPiece::P20 => SelectPiece::P500,
             SelectPiece::P50 => SelectPiece::P20,
             SelectPiece::P100 => SelectPiece::P50,
             SelectPiece::P150 => SelectPiece::P100,
@@ -131,6 +130,7 @@ impl SelectPiece {
             SelectPiece::P250 => SelectPiece::P200,
             SelectPiece::P300 => SelectPiece::P250,
             SelectPiece::P400 => SelectPiece::P300,
+            SelectPiece::P500 => SelectPiece::P400,
         };
     }
 }

@@ -1,11 +1,10 @@
 use crate::{
-    despawn_screen, AnimeCamera, AppState, OriginImage, SelectGameMode, SelectPiece, UiCamera,
+    despawn_screen, AnimeCamera, AppState, OriginImage, SelectGameMode, SelectPiece,
     ANIMATION_LAYERS,
 };
 use bevy::animation::{AnimationTarget, AnimationTargetId};
 use bevy::color::palettes::basic::BLACK;
 use bevy::prelude::*;
-use bevy::ui::ContentSize;
 use bevy::window::WindowResized;
 
 pub(crate) fn menu_plugin(app: &mut App) {
@@ -36,17 +35,25 @@ const NORMAL_BUTTON: Color = Color::srgb(0.15, 0.15, 0.15);
 const HOVERED_BUTTON: Color = Color::srgb(0.25, 0.25, 0.25);
 const PRESSED_BUTTON: Color = Color::srgb(0.35, 0.75, 0.35);
 
-#[derive(Reflect)]
-struct TextColorProperty;
-
 #[derive(Component)]
 struct OnMenuScreen;
+
+const IMAGE_PATHS: [&str; 5] = [
+    "images/raw.jpg",
+    "images/rock.jpg",
+    "images/mount.jpg",
+    "images/sea.jpg",
+    "images/dock.jpg",
+];
 
 #[derive(Resource, Deref, DerefMut)]
 struct MenuTimer(Timer);
 
 #[derive(Event)]
 struct ShowTitleAnime;
+
+#[derive(Reflect)]
+struct TextColorProperty;
 
 impl AnimatableProperty for TextColorProperty {
     type Component = TextColor;
@@ -62,6 +69,7 @@ impl AnimatableProperty for TextColorProperty {
 }
 
 fn setup_camera(mut commands: Commands) {
+    commands.spawn((Camera2d, IsDefaultUiCamera));
     let anime_camera = commands
         .spawn((
             Camera2d,
@@ -72,11 +80,7 @@ fn setup_camera(mut commands: Commands) {
             ANIMATION_LAYERS,
         ))
         .id();
-
     commands.insert_resource(AnimeCamera(anime_camera));
-
-    let ui_camera = commands.spawn(Camera2d).id();
-    commands.insert_resource(UiCamera(ui_camera));
 }
 
 #[derive(Component)]
@@ -110,13 +114,12 @@ fn show_title(
     };
     let text_justification = JustifyText::Center;
 
-    let title = Name::new("title");
-
     let start_pos = (
         window.width() / -2.0 + window.width() * 0.2,
         window.height() / -2.0 + window.height() * 0.6,
     );
 
+    let title = Name::new("title");
     // Creating the animation
     let mut animation = AnimationClip::default();
     // A curve can modify a single part of a transform: here, the translation.
@@ -148,7 +151,7 @@ fn show_title(
     // Create the animation graph
     let (graph, animation_index) = AnimationGraph::from_clip(animations.add(animation));
 
-    // Create the animation player, and set it to repeat
+    // Create the animation player
     let mut player = AnimationPlayer::default();
     player.play(animation_index);
 
@@ -178,7 +181,6 @@ fn show_title(
 fn setup_menu(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    ui_camera: Res<UiCamera>,
     select_piece: Res<SelectPiece>,
     select_mode: Res<SelectGameMode>,
 ) {
@@ -198,7 +200,6 @@ fn setup_menu(
                 ..default()
             },
             UiImage::new(asset_server.load("images/puzzle.jpg")),
-            TargetCamera(**ui_camera),
             OnMenuScreen,
         ))
         .id();
@@ -519,14 +520,6 @@ struct OriginImageContainer;
 #[derive(Component)]
 struct ImagesContainer;
 
-const IMAGE_PATHS: [&str; 5] = [
-    "images/raw.jpg",
-    "images/rock.jpg",
-    "images/mount.jpg",
-    "images/sea.jpg",
-    "images/docker.jpg",
-];
-
 #[derive(Resource, Default, Deref, DerefMut)]
 pub struct LoadedImages(Vec<Handle<Image>>);
 
@@ -642,7 +635,6 @@ struct GameModeText;
 
 fn update_game_mode_text(
     select_mode: Res<SelectGameMode>,
-
     mut mode_query: Query<&mut Text, With<GameModeText>>,
 ) {
     for mut text in mode_query.iter_mut() {
@@ -672,7 +664,7 @@ fn drag_end(_trigger: Trigger<Pointer<DragEnd>>, mut dragging: ResMut<Dragging>)
 
 fn drag_images_collection(
     trigger: Trigger<Pointer<Drag>>,
-    mut container: Single<(&mut Node, &ComputedNode, &Children), With<ImagesContainer>>,
+    container: Single<(&mut Node, &ComputedNode, &Children), With<ImagesContainer>>,
     compute_node: Query<&ComputedNode>,
 ) {
     let (mut container, current_node, children) = container.into_inner();
@@ -683,7 +675,7 @@ fn drag_images_collection(
     let child_node = compute_node.get(*children.first().unwrap()).unwrap();
     let child_width = child_node.size().x;
 
-    let min_x = -(current_node.size().x + child_width / 2.0);
+    let min_x = -(current_node.size().x + child_width);
     let max_x = current_node.size().x - child_width;
     let new_left = px + trigger.event.delta.x;
 
