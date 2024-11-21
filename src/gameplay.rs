@@ -46,16 +46,14 @@ pub(super) fn plugin(app: &mut App) {
             .run_if(in_state(GameState::Generating)),
     );
 
+    // pause logic
+    app.add_systems(OnEnter(GameState::Pause), setup_pause_ui)
+        .add_systems(OnExit(GameState::Pause), despawn_screen::<OnPauseScreen>)
+        .add_systems(Update, back_to_game.run_if(in_state(GameState::Pause)));
+
     // play logic
     app.add_event::<Shuffle>()
-        .add_systems(
-            Update,
-            (move_piece, cancel_all_move, shuffle_pieces).run_if(in_state(GameState::Play)),
-        )
-        .add_observer(combine_together);
-
-    // ui
-    app.add_systems(OnEnter(GameState::Play), setup_game_ui)
+        .add_systems(OnEnter(GameState::Play), setup_game_ui)
         .add_event::<AdjustScale>()
         .add_event::<ToggleBackgroundHint>()
         .add_event::<TogglePuzzleHint>()
@@ -63,6 +61,9 @@ pub(super) fn plugin(app: &mut App) {
         .add_systems(
             Update,
             (
+                move_piece,
+                cancel_all_move,
+                shuffle_pieces,
                 adjust_camera_scale,
                 handle_keyboard_input,
                 handle_mouse_wheel_input,
@@ -72,7 +73,8 @@ pub(super) fn plugin(app: &mut App) {
                 handle_puzzle_hint,
             )
                 .run_if(in_state(GameState::Play)),
-        );
+        )
+        .add_observer(combine_together);
 }
 
 fn setup_game(
@@ -679,7 +681,6 @@ fn setup_generating_ui(
     asset_server: Res<AssetServer>,
     generator: Res<JigsawPuzzleGenerator>,
 ) {
-    debug!("Setup generating ui");
     commands
         .spawn((
             Node {
@@ -714,12 +715,67 @@ fn setup_generating_ui(
             ));
         });
 }
+#[derive(Component)]
+struct OnPauseScreen;
+
+fn setup_pause_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                display: Display::Flex,
+                flex_direction: FlexDirection::Column,
+                align_content: AlignContent::Center,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            BackgroundColor(Color::srgb_u8(149, 165, 166)),
+            OnPauseScreen,
+        ))
+        .observe(
+            |_trigger: Trigger<Pointer<Click>>, mut game_state: ResMut<NextState<GameState>>| {
+                game_state.set(GameState::Play);
+            },
+        )
+        .with_children(|p| {
+            let font = asset_server.load("fonts/MinecraftEvenings.ttf");
+            let text_font = TextFont {
+                font: font.clone(),
+                font_size: 55.0,
+                ..default()
+            };
+
+            p.spawn((Text::new("Paused"), TextColor(Color::BLACK), text_font));
+            p.spawn((
+                Text::new("click or press ESC to continue"),
+                TextColor(Color::BLACK),
+            ));
+        });
+}
+
+fn back_to_game(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    mut next_state: ResMut<NextState<GameState>>,
+) {
+    if keyboard_input.just_pressed(KeyCode::Escape) {
+        next_state.set(GameState::Play);
+    }
+}
 
 #[derive(Component)]
 struct PieceCount;
 
+#[derive(Component)]
+struct OnPlayScreen;
+
 #[allow(dead_code)]
-fn setup_game_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup_game_ui(mut commands: Commands, asset_server: Res<AssetServer>, mut already: Local<bool>) {
+    if *already {
+        return;
+    }
+    *already = true;
     // let background_color = MAROON.into();
     let root_node = commands
         .spawn((
@@ -729,6 +785,7 @@ fn setup_game_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                 justify_content: JustifyContent::SpaceBetween,
                 ..default()
             },
+            OnPlayScreen,
             PickingBehavior::IGNORE,
         ))
         .id();
@@ -969,7 +1026,13 @@ fn setup_game_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                         ..default()
                     },
                     PauseButton,
-                ));
+                ))
+                .observe(
+                    |_trigger: Trigger<Pointer<Click>>,
+                     mut game_state: ResMut<NextState<GameState>>| {
+                        game_state.set(GameState::Pause)
+                    },
+                );
                 p.spawn((
                     UiImage::new(asset_server.load("icons/fullscreen.png")),
                     Node {
