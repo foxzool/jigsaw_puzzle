@@ -563,6 +563,24 @@ impl JigsawGenerator {
         }
     }
 
+    pub fn from_rgba8(
+        width: u32,
+        height: u32,
+        image_bytes: &[u8],
+        pieces_in_column: usize,
+        pieces_in_row: usize,
+    ) -> Result<Self> {
+        let origin_image = DynamicImage::ImageRgba8(
+            RgbaImage::from_raw(width, height, image_bytes.to_vec())
+                .ok_or_else(|| anyhow!("Failed to create image from raw bytes"))?,
+        );
+        Ok(JigsawGenerator::new(
+            origin_image,
+            pieces_in_column,
+            pieces_in_row,
+        ))
+    }
+
     /// Creates a new `JigsawGenerator` instance from an image file at the given `image_path`
     /// with a given number of pieces in a column and a row.
     pub fn from_path(

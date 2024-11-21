@@ -73,8 +73,8 @@ fn despawn_screen<T: Component>(to_despawn: Query<Entity, With<T>>, mut commands
 
 #[derive(Resource, Default, Clone, Copy, Debug)]
 enum SelectPiece {
-    #[default]
     P20,
+    #[default]
     P50,
     P100,
     P150,
@@ -106,6 +106,20 @@ impl fmt::Display for SelectPiece {
 }
 
 impl SelectPiece {
+    fn to_columns_rows(&self) -> (usize, usize) {
+        match self {
+            SelectPiece::P20 => (5, 4),
+            SelectPiece::P50 => (10, 5),
+            SelectPiece::P100 => (10, 10),
+            SelectPiece::P150 => (15, 10),
+            SelectPiece::P200 => (20, 10),
+            SelectPiece::P250 => (25, 10),
+            SelectPiece::P300 => (30, 10),
+            SelectPiece::P400 => (20, 20),
+            SelectPiece::P500 => (25, 20),
+        }
+    }
+
     fn next(&mut self) {
         *self = match self {
             SelectPiece::P20 => SelectPiece::P50,

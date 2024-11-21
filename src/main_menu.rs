@@ -129,8 +129,8 @@ fn show_title(
         UnevenSampleAutoCurve::new([0.0, 0.5, 1.0, 2.0, 3.0].into_iter().zip([
             Vec3::new(start_pos.0, start_pos.1, 0.0),
             Vec3::new(start_pos.0, start_pos.1 + 50.0, 0.0),
-            Vec3::new(start_pos.0, start_pos.1 + 100.0, 0.0),
-            Vec3::new(start_pos.0, start_pos.1 + 150.0, 0.0),
+            Vec3::new(start_pos.0, start_pos.1 + 110.0, 0.0),
+            Vec3::new(start_pos.0, start_pos.1 + 180.0, 0.0),
         ]))
         .map(TranslationCurve)
         .expect("should be able to build translation curve because we pass in valid samples"),
@@ -221,13 +221,13 @@ fn setup_menu(
         .with_children(|p| {
             // top container holder
             p.spawn(Node {
-                height: Val::Percent(45.0),
+                height: Val::Percent(52.0),
                 ..default()
             });
             // bottom container
             p.spawn((
                 Node {
-                    height: Val::Percent(55.0),
+                    height: Val::Percent(48.0),
                     // width: Val::Px(300.0),
                     display: Display::Flex,
                     flex_direction: FlexDirection::Column,
@@ -248,6 +248,7 @@ fn setup_menu(
                     Node {
                         // width: Val::Percent(100.0),
                         height: Val::Px(100.0),
+                        column_gap: Val::Px(10.0),
                         justify_content: JustifyContent::SpaceBetween,
                         ..default()
                     },
@@ -469,9 +470,7 @@ fn setup_menu(
                 Node {
                     width: Val::Percent(100.0),
                     height: Val::Percent(30.0),
-                    // display: Display::Flex,
-                    // justify_content: JustifyContent::SpaceBetween,
-                    // padding: UiRect::all(Val::Px(30.)),
+                    margin: UiRect::all(Val::Px(4.0)),
                     overflow: Overflow::clip(),
                     ..default()
                 },
@@ -480,7 +479,7 @@ fn setup_menu(
             .with_children(|p| {
                 p.spawn((
                     Node {
-                        width: Val::Percent(100.0),
+                        // width: Val::Percent(100.0),
                         height: Val::Percent(80.0),
                         display: Display::Flex,
                         justify_content: JustifyContent::SpaceBetween,

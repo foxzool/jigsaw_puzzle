@@ -1,4 +1,4 @@
-use crate::{AppState, Piece};
+use crate::{AppState, OriginImage, Piece, SelectGameMode, SelectPiece};
 use bevy::asset::RenderAssetUsages;
 use bevy::color::palettes::basic::YELLOW;
 use bevy::ecs::world::CommandQueue;
@@ -54,38 +54,33 @@ pub(super) fn plugin(app: &mut App) {
         );
 }
 
-#[derive(Resource)]
-pub struct OriginImage {
-    pub image: Handle<Image>,
-    pub size: Vec2,
-}
-
-fn setup_generator(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let image_path = "raw.jpg";
-    let generator = JigsawGenerator::from_path(image_path, 9, 6).expect("Failed to load image");
-
-    // load image from dynamic image
-    let image = Image::from_dynamic(
-        generator.origin_image().clone(),
-        true,
-        RenderAssetUsages::RENDER_WORLD,
-    );
-    let image_size = image.size_f32();
-    let image_handle = asset_server.add(image);
-    commands.insert_resource(OriginImage {
-        image: image_handle.clone(),
-        size: image_size,
-    });
+fn setup_generator(
+    mut commands: Commands,
+    images: Res<Assets<Image>>,
+    origin_image: Res<OriginImage>,
+    select_game_mode: Res<SelectGameMode>,
+    select_piece: Res<SelectPiece>,
+) {
+    let image = images.get(&origin_image.0).unwrap();
+    let (columns, rows) = select_piece.to_columns_rows();
+    let generator = JigsawGenerator::from_rgba8(
+        image.texture_descriptor.size.width,
+        image.texture_descriptor.size.height,
+        &image.data,
+        columns,
+        rows,
+    )
+    .expect("Failed to load image");
 
     commands
         .spawn((
-            Sprite::from_color(Color::Srgba(Srgba::new(0.0, 0.0, 0.0, 0.6)), image_size),
+            // Sprite::from_color(Color::Srgba(Srgba::new(0.0, 0.0, 0.0, 0.6)), image_size),
             BoardBackgroundImage,
             Visibility::Hidden,
         ))
         .with_children(|p| {
             p.spawn((
-                Sprite::from_image(image_handle),
+                Sprite::from_image(origin_image.0.clone()),
                 Transform::from_xyz(0.0, 0.0, -1.0),
             ));
         });
@@ -1057,15 +1052,15 @@ fn hint_image_click(
     origin_image: Res<OriginImage>,
 ) {
     hint_visible.toggle_visible_hidden();
-    let aspect_ratio = origin_image.size.x / origin_image.size.y;
+    // let aspect_ratio = origin_image.size.x / origin_image.size.y;
 
     commands
         .entity(*small_hint_image)
         .insert((
-            UiImage::new(origin_image.image.clone()),
+            UiImage::new(origin_image.0.clone()),
             Node {
                 width: Val::Px(400.0),
-                aspect_ratio: Some(aspect_ratio),
+                // aspect_ratio: Some(aspect_ratio),
                 ..default()
             },
             SmallHintImage,
