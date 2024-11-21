@@ -6,7 +6,6 @@ use bevy::ecs::world::CommandQueue;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
-use bevy::tasks::{block_on, AsyncComputeTaskPool, IoTaskPool, Task};
 use bevy::utils::HashSet;
 use bevy::window::WindowMode;
 use flume::{bounded, Receiver};
@@ -37,17 +36,17 @@ pub(super) fn plugin(app: &mut App) {
         OnExit(GameState::Generating),
         despawn_screen::<OnGeneratingScreen>,
     )
+    .add_systems(Update, (adjust_camera_on_added_sprite,))
     .add_systems(
         PostUpdate,
         (
             spawn_piece.run_if(resource_changed::<JigsawPuzzleGenerator>),
             handle_tasks,
-            adjust_camera_on_added_sprite,
         )
             .run_if(in_state(GameState::Generating)),
     );
 
-    // logic
+    // play logic
     app.add_event::<Shuffle>()
         .add_systems(
             Update,
@@ -56,7 +55,7 @@ pub(super) fn plugin(app: &mut App) {
         .add_observer(combine_together);
 
     // ui
-    app.add_systems(OnEnter(GameState::Play), setup_ui)
+    app.add_systems(OnEnter(GameState::Play), setup_game_ui)
         .add_event::<AdjustScale>()
         .add_event::<ToggleBackgroundHint>()
         .add_event::<TogglePuzzleHint>()
@@ -92,7 +91,7 @@ fn setup_game(
 }
 
 fn change_to_generate(mut game_state: ResMut<NextState<GameState>>) {
-    std::thread::sleep(std::time::Duration::from_secs(1));
+    std::thread::sleep(Duration::from_secs(1));
     game_state.set(GameState::Generating);
 }
 
@@ -113,18 +112,17 @@ fn setup_generator(
 ) {
     let image = images.get(&origin_image.0).unwrap();
     let (columns, rows) = select_piece.to_columns_rows();
-    let generator = JigsawGenerator::from_rgba8(
-        image.texture_descriptor.size.width,
-        image.texture_descriptor.size.height,
-        &image.data,
-        columns,
-        rows,
-    )
-    .expect("Failed to load image");
+    let width = image.texture_descriptor.size.width;
+    let height = image.texture_descriptor.size.height;
+    let generator = JigsawGenerator::from_rgba8(width, height, &image.data, columns, rows)
+        .expect("Failed to load image");
 
     commands
         .spawn((
-            // Sprite::from_color(Color::Srgba(Srgba::new(0.0, 0.0, 0.0, 0.6)), image_size),
+            Sprite::from_color(
+                Color::Srgba(Srgba::new(0.0, 0.0, 0.0, 0.6)),
+                Vec2::new(width as f32, height as f32),
+            ),
             BoardBackgroundImage,
             Visibility::Hidden,
         ))
@@ -310,7 +308,7 @@ struct MoveStart {
 fn on_drag_start(
     trigger: Trigger<Pointer<DragStart>>,
     mut piece: Query<&mut Transform, With<Piece>>,
-    camera: Single<(&Camera, &GlobalTransform), With<Camera2d>>,
+    camera: Single<(&Camera, &GlobalTransform), (With<Camera2d>, With<IsDefaultUiCamera>)>,
     mut commands: Commands,
 ) {
     if let Ok(mut transform) = piece.get_mut(trigger.entity()) {
@@ -342,7 +340,7 @@ fn on_drag_end(
 fn on_click_piece(
     trigger: Trigger<Pointer<Click>>,
     mut image: Query<(&mut Transform, Option<&MoveStart>), With<Piece>>,
-    camera: Single<(&Camera, &GlobalTransform), With<Camera2d>>,
+    camera: Single<(&Camera, &GlobalTransform), (With<Camera2d>, With<IsDefaultUiCamera>)>,
     mut commands: Commands,
 ) {
     if let Ok((mut transform, opt_moveable)) = image.get_mut(trigger.entity()) {
@@ -632,7 +630,7 @@ fn shuffle_pieces(
     mut shuffle_events: EventReader<Shuffle>,
     mut query: Query<(&Piece, &mut Transform)>,
     window: Single<&Window>,
-    camera: Single<&OrthographicProjection, With<Camera2d>>,
+    camera: Single<&OrthographicProjection, (With<Camera2d>, With<IsDefaultUiCamera>)>,
 ) {
     for event in shuffle_events.read() {
         match event {
@@ -721,7 +719,7 @@ fn setup_generating_ui(
 struct PieceCount;
 
 #[allow(dead_code)]
-fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup_game_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
     // let background_color = MAROON.into();
     let root_node = commands
         .spawn((
@@ -798,7 +796,7 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                                     ZoomOutButton,
                                 )).observe(
                                     |_trigger: Trigger<Pointer<Click>>, mut commands: Commands| {
-                                        commands.send_event(AdjustScale(-0.1));
+                                        commands.send_event(AdjustScale(0.1));
                                     },
                                 );
 
@@ -817,7 +815,7 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                                     ZoomInButton,
                                 )).observe(
                                     |_trigger: Trigger<Pointer<Click>>, mut commands: Commands| {
-                                        commands.send_event(AdjustScale(0.1));
+                                        commands.send_event(AdjustScale(-0.1));
                                     },
                                 );
                             });
@@ -991,6 +989,8 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands
         .entity(root_node)
         .add_children(&[left_column, right_column]);
+
+    commands.send_event(Shuffle::Random);
 }
 
 #[derive(Component)]
@@ -999,7 +999,7 @@ pub struct BoardBackgroundImage;
 /// Adjust the camera to fit the image
 fn adjust_camera_on_added_sprite(
     _sprite: Single<Entity, Added<BoardBackgroundImage>>,
-    mut camera_2d: Single<&mut OrthographicProjection, With<Camera2d>>,
+    mut camera_2d: Single<&mut OrthographicProjection, (With<Camera2d>, With<IsDefaultUiCamera>)>,
     window: Single<&Window>,
     generator: Res<JigsawPuzzleGenerator>,
 ) {
@@ -1019,7 +1019,7 @@ const MIN_SCALE: f32 = 0.5;
 /// Adjust the camera scale on event
 fn adjust_camera_scale(
     mut event: EventReader<AdjustScale>,
-    mut camera_2d: Single<&mut OrthographicProjection, With<Camera2d>>,
+    mut camera_2d: Single<&mut OrthographicProjection, (With<Camera2d>, With<IsDefaultUiCamera>)>,
 ) {
     for AdjustScale(scale) in event.read() {
         let new_scale = camera_2d.scale + scale;
