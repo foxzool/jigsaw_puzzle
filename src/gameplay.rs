@@ -1,3 +1,4 @@
+use crate::{despawn_screen, GameState};
 use crate::{AppState, OriginImage, Piece, SelectGameMode, SelectPiece};
 use bevy::asset::RenderAssetUsages;
 use bevy::color::palettes::basic::YELLOW;
@@ -5,35 +6,57 @@ use bevy::ecs::world::CommandQueue;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
-use bevy::tasks::futures_lite::future;
-use bevy::tasks::{block_on, AsyncComputeTaskPool, Task};
+use bevy::tasks::{block_on, AsyncComputeTaskPool, IoTaskPool, Task};
 use bevy::utils::HashSet;
 use bevy::window::WindowMode;
+use flume::{bounded, Receiver};
 use jigsaw_puzzle_generator::image::GenericImageView;
 use jigsaw_puzzle_generator::{GameMode, JigsawGenerator, JigsawPiece};
 use log::debug;
 use rand::Rng;
+use std::time::Duration;
 
 pub(super) fn plugin(app: &mut App) {
-    // logic
-    app.add_systems(OnEnter(AppState::Gameplay), setup_generator)
-        .add_event::<Shuffle>()
+    // app state
+    app.add_systems(OnEnter(GameState::Setup), setup_game)
         .add_systems(
             Update,
-            (move_piece, cancel_all_move, shuffle_pieces).run_if(in_state(AppState::Gameplay)),
+            change_to_generate
+                .run_if(resource_changed::<OriginImage>)
+                .run_if(in_state(GameState::Setup)),
         )
+        .add_systems(OnEnter(AppState::Gameplay), enter_app_gameplay)
+        .add_systems(OnExit(AppState::Gameplay), exit_app_gameplay);
+
+    // generation piece
+    app.add_systems(
+        OnEnter(GameState::Generating),
+        (setup_generator, setup_generating_ui).chain(),
+    )
+    .add_systems(
+        OnExit(GameState::Generating),
+        despawn_screen::<OnGeneratingScreen>,
+    )
+    .add_systems(
+        PostUpdate,
+        (
+            spawn_piece.run_if(resource_changed::<JigsawPuzzleGenerator>),
+            handle_tasks,
+            adjust_camera_on_added_sprite,
+        )
+            .run_if(in_state(GameState::Generating)),
+    );
+
+    // logic
+    app.add_event::<Shuffle>()
         .add_systems(
-            PostUpdate,
-            (
-                spawn_piece.run_if(resource_changed::<JigsawPuzzleGenerator>),
-                handle_tasks,
-            )
-                .run_if(in_state(AppState::Gameplay)),
+            Update,
+            (move_piece, cancel_all_move, shuffle_pieces).run_if(in_state(GameState::Play)),
         )
         .add_observer(combine_together);
 
     // ui
-    app.add_systems(OnEnter(AppState::Gameplay), setup_ui)
+    app.add_systems(OnEnter(GameState::Play), setup_ui)
         .add_event::<AdjustScale>()
         .add_event::<ToggleBackgroundHint>()
         .add_event::<TogglePuzzleHint>()
@@ -41,7 +64,6 @@ pub(super) fn plugin(app: &mut App) {
         .add_systems(
             Update,
             (
-                adjust_camera_on_added_sprite,
                 adjust_camera_scale,
                 handle_keyboard_input,
                 handle_mouse_wheel_input,
@@ -50,8 +72,36 @@ pub(super) fn plugin(app: &mut App) {
                 exit_fullscreen_on_esc,
                 handle_puzzle_hint,
             )
-                .run_if(in_state(AppState::Gameplay)),
+                .run_if(in_state(GameState::Play)),
         );
+}
+
+fn setup_game(
+    origin_image: Option<Res<OriginImage>>,
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut game_state: ResMut<NextState<GameState>>,
+) {
+    if origin_image.is_none() {
+        debug!("Load default image");
+        let image = asset_server.load("images/raw.jpg");
+        commands.insert_resource(OriginImage(image));
+    } else {
+        game_state.set(GameState::Generating);
+    }
+}
+
+fn change_to_generate(mut game_state: ResMut<NextState<GameState>>) {
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    game_state.set(GameState::Generating);
+}
+
+fn enter_app_gameplay(mut game_state: ResMut<NextState<GameState>>) {
+    game_state.set(GameState::Setup);
+}
+
+fn exit_app_gameplay(mut game_state: ResMut<NextState<GameState>>) {
+    game_state.set(GameState::Setup);
 }
 
 fn setup_generator(
@@ -88,11 +138,14 @@ fn setup_generator(
     commands.insert_resource(JigsawPuzzleGenerator(generator));
 }
 
+#[derive(Component)]
+pub struct OnGeneratingScreen;
+
 #[derive(Debug, Resource, Deref, DerefMut)]
 pub struct JigsawPuzzleGenerator(pub JigsawGenerator);
 
 #[derive(Component)]
-struct CropTask(Task<CommandQueue>);
+struct CropTask(Receiver<CommandQueue>);
 
 #[derive(Component)]
 struct WhiteImage;
@@ -102,8 +155,9 @@ struct ColorImage;
 
 /// Spawn the pieces of the jigsaw puzzle
 fn spawn_piece(mut commands: Commands, generator: Res<JigsawPuzzleGenerator>) {
+    let start = std::time::Instant::now();
     if let Ok(template) = generator.generate(GameMode::Classic, false) {
-        let thread_pool = AsyncComputeTaskPool::get();
+        let (tx, rx) = bounded(template.pieces.len());
         for piece in template.pieces.iter() {
             let template_clone = template.clone();
             let piece_clone = piece.clone();
@@ -127,7 +181,9 @@ fn spawn_piece(mut commands: Commands, generator: Res<JigsawPuzzleGenerator>) {
                 .observe(on_not_selected)
                 .id();
 
-            let task = thread_pool.spawn(async move {
+            let sender = tx.clone();
+
+            std::thread::spawn(move || {
                 let mut command_queue = CommandQueue::default();
                 let cropped_image = piece_clone.crop(&template_clone.origin_image);
                 let white_image = piece_clone.fill_white(&cropped_image);
@@ -192,11 +248,12 @@ fn spawn_piece(mut commands: Commands, generator: Res<JigsawPuzzleGenerator>) {
                         .remove::<CropTask>();
                 });
 
-                command_queue
+                sender.send(command_queue).unwrap();
             });
-
-            commands.entity(entity).insert(CropTask(task));
         }
+
+        commands.spawn(CropTask(rx.clone()));
+        debug!("Time to generate pieces: {:?}", start.elapsed());
         commands.send_event(Shuffle::Random);
     };
 }
@@ -223,10 +280,23 @@ fn init_position(piece: &JigsawPiece, origin_image_size: (u32, u32)) -> Vec2 {
     )
 }
 
-fn handle_tasks(mut commands: Commands, mut crop_tasks: Query<&mut CropTask>) {
-    for mut task in &mut crop_tasks {
-        if let Some(mut commands_queue) = block_on(future::poll_once(&mut task.0)) {
-            commands.append(&mut commands_queue);
+fn handle_tasks(
+    mut commands: Commands,
+    mut crop_tasks: Query<&CropTask>,
+    mut loaded_pieces: Local<usize>,
+    generator: Res<JigsawPuzzleGenerator>,
+    mut game_state: ResMut<NextState<GameState>>,
+    mut text: Single<&mut Text, With<PieceCount>>,
+) {
+    for task in crop_tasks.iter_mut() {
+        for mut queue in task.0.try_iter() {
+            commands.append(&mut queue);
+            *loaded_pieces += 1;
+        }
+        text.0 = format!("{}/{}", *loaded_pieces, generator.pieces_count());
+
+        if *loaded_pieces == generator.pieces_count() {
+            game_state.set(GameState::Play)
         }
     }
 }
@@ -605,6 +675,50 @@ pub struct EdgeHintButton;
 pub struct PuzzleHintChildButton;
 #[derive(Component)]
 pub struct BackgroundHintButton;
+
+fn setup_generating_ui(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    generator: Res<JigsawPuzzleGenerator>,
+) {
+    debug!("Setup generating ui");
+    commands
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                display: Display::Flex,
+                flex_direction: FlexDirection::Column,
+                align_content: AlignContent::Center,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            OnGeneratingScreen,
+        ))
+        .with_children(|p| {
+            let font = asset_server.load("fonts/MinecraftEvenings.ttf");
+            let text_font = TextFont {
+                font: font.clone(),
+                font_size: 55.0,
+                ..default()
+            };
+
+            p.spawn((
+                Text::new("Loading pieces...."),
+                TextColor(Color::BLACK),
+                text_font,
+            ));
+            p.spawn((
+                Text::new(format!("0/{}", generator.pieces_count())),
+                TextColor(Color::BLACK),
+                PieceCount,
+            ));
+        });
+}
+
+#[derive(Component)]
+struct PieceCount;
 
 #[allow(dead_code)]
 fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {

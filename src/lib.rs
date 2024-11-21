@@ -30,7 +30,9 @@ impl Plugin for PuzzlePlugin {
         .insert_resource(ClearColor(Color::srgb(0.9, 0.9, 0.9)))
         .init_resource::<SelectPiece>()
         .init_resource::<SelectGameMode>()
-        .init_state::<AppState>();
+        .init_state::<AppState>()
+        .init_state::<GameState>()
+        .add_systems(Startup, setup_camera);
 
         app.add_plugins((main_menu::menu_plugin, gameplay::plugin));
     }
@@ -39,18 +41,20 @@ impl Plugin for PuzzlePlugin {
 /// The state of the application.
 #[derive(Clone, Copy, Default, Eq, PartialEq, Debug, Hash, States)]
 pub enum AppState {
-    #[default]
     MainMenu,
+    #[default]
     Gameplay,
 }
 
-/// The state of the game.
+/// game state
 #[derive(Clone, Copy, Default, Eq, PartialEq, Debug, Hash, States)]
 pub enum GameState {
     #[default]
-    Playing,
-    Paused,
-    GameOver,
+    Setup,
+    Generating,
+    Play,
+    Pause,
+    Finish,
 }
 
 #[derive(Resource, Deref)]
@@ -69,6 +73,21 @@ fn despawn_screen<T: Component>(to_despawn: Query<Entity, With<T>>, mut commands
     for entity in &to_despawn {
         commands.entity(entity).despawn_recursive();
     }
+}
+
+fn setup_camera(mut commands: Commands) {
+    commands.spawn((Camera2d, IsDefaultUiCamera));
+    let anime_camera = commands
+        .spawn((
+            Camera2d,
+            Camera {
+                order: 1,
+                ..default()
+            },
+            ANIMATION_LAYERS,
+        ))
+        .id();
+    commands.insert_resource(AnimeCamera(anime_camera));
 }
 
 #[derive(Resource, Default, Clone, Copy, Debug)]

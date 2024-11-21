@@ -12,7 +12,7 @@ use bezier_rs::{Bezier, BezierHandles, Identifier, Subpath};
 use glam::DVec2;
 use image::{DynamicImage, GenericImageView, Rgba, RgbaImage};
 
-use log::{debug, info};
+use log::{debug, info, trace};
 use rayon::iter::ParallelIterator;
 use std::vec;
 
@@ -885,7 +885,7 @@ impl JigsawPiece {
     }
 
     pub fn crop(&self, image: &DynamicImage) -> DynamicImage {
-        debug!("start crop piece {} image", self.index);
+        trace!("start crop piece {} image", self.index);
         let mut piece_image = image
             .view(
                 self.top_left_x,

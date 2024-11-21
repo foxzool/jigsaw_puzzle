@@ -16,6 +16,7 @@ bevy = { version = "0.15.0-rc.3", features = ["bevy_sprite_picking_backend", "jp
 jigsaw_puzzle_generator = { path = "jigsaw_puzzle_generator" }
 rand = "0.8.5"
 log = "0.4.22"
+flume = "0.11.0"
 
 [dev-dependencies]
 

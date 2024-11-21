@@ -12,7 +12,7 @@ pub(crate) fn menu_plugin(app: &mut App) {
         .init_resource::<Dragging>()
         .add_systems(
             OnEnter(AppState::MainMenu),
-            (setup_camera, setup_menu, load_default_images).chain(),
+            (setup_menu, load_default_images).chain(),
         )
         .add_systems(
             Update,
@@ -66,21 +66,6 @@ impl AnimatableProperty for TextColorProperty {
             _ => None,
         }
     }
-}
-
-fn setup_camera(mut commands: Commands) {
-    commands.spawn((Camera2d, IsDefaultUiCamera));
-    let anime_camera = commands
-        .spawn((
-            Camera2d,
-            Camera {
-                order: 1,
-                ..default()
-            },
-            ANIMATION_LAYERS,
-        ))
-        .id();
-    commands.insert_resource(AnimeCamera(anime_camera));
 }
 
 #[derive(Component)]
@@ -420,8 +405,8 @@ fn setup_menu(
                 ))
                 .observe(
                     |_trigger: Trigger<Pointer<Click>>,
-                     mut game_state: ResMut<NextState<AppState>>| {
-                        game_state.set(AppState::Gameplay)
+                     mut app_state: ResMut<NextState<AppState>>| {
+                        app_state.set(AppState::Gameplay)
                     },
                 );
             });
