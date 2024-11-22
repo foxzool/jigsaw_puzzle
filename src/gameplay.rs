@@ -15,7 +15,7 @@ use jigsaw_puzzle_generator::image::GenericImageView;
 use jigsaw_puzzle_generator::{GameMode, JigsawGenerator, JigsawPiece, JigsawTemplate};
 use log::debug;
 use rand::Rng;
-use std::ops::{Deref, DerefMut};
+use std::ops::DerefMut;
 use std::time::Duration;
 
 pub(super) fn plugin(app: &mut App) {
@@ -270,6 +270,7 @@ fn setup_generator(
             ),
             BoardBackgroundImage,
             Visibility::Hidden,
+            OnPlayScreen,
         ))
         .with_children(|p| {
             p.spawn((

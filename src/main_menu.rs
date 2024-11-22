@@ -543,14 +543,14 @@ fn button_interaction(
         let mut text_color = text_query.get_mut(children[0]).unwrap();
         match *interaction {
             Interaction::Pressed => {
-                text_color.0 = PRESSED_BUTTON.into();
+                text_color.0 = PRESSED_BUTTON;
             }
             Interaction::Hovered => {
                 // *color = Color::srgb(0.8, 0.8, 0.8).into();
-                text_color.0 = HOVERED_BUTTON.into();
+                text_color.0 = HOVERED_BUTTON;
             }
             Interaction::None => {
-                text_color.0 = NORMAL_BUTTON.into();
+                text_color.0 = NORMAL_BUTTON;
                 // *color = Color::srgba(0.0, 0.0, 0.0, 0.0).into();
                 // border_color.0 = Color::BLACK;
             }
