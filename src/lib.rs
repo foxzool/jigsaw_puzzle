@@ -50,6 +50,7 @@ pub enum AppState {
 #[derive(Clone, Copy, Default, Eq, PartialEq, Debug, Hash, States)]
 pub enum GameState {
     #[default]
+    Idle,
     Setup,
     Generating,
     Play,
@@ -92,8 +93,8 @@ fn setup_camera(mut commands: Commands) {
 
 #[derive(Resource, Default, Clone, Copy, Debug)]
 enum SelectPiece {
-    P20,
     #[default]
+    P20,
     P50,
     P100,
     P150,

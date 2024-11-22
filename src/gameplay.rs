@@ -1,11 +1,12 @@
 use crate::{despawn_screen, GameState};
 use crate::{AppState, OriginImage, Piece, SelectGameMode, SelectPiece};
 use bevy::asset::RenderAssetUsages;
-use bevy::color::palettes::basic::YELLOW;
+use bevy::color::palettes::basic::{GREEN, YELLOW};
 use bevy::ecs::world::CommandQueue;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
+use bevy::time::Stopwatch;
 use bevy::utils::HashSet;
 use bevy::window::WindowMode;
 use flume::{bounded, Receiver};
@@ -61,6 +62,7 @@ pub(super) fn plugin(app: &mut App) {
         .add_systems(
             Update,
             (
+                update_game_time,
                 move_piece,
                 cancel_all_move,
                 shuffle_pieces,
@@ -102,8 +104,11 @@ fn enter_app_gameplay(mut game_state: ResMut<NextState<GameState>>) {
 }
 
 fn exit_app_gameplay(mut game_state: ResMut<NextState<GameState>>) {
-    game_state.set(GameState::Setup);
+    game_state.set(GameState::Idle);
 }
+
+#[derive(Resource, Deref, DerefMut, Debug)]
+pub struct GameStartTime(pub Stopwatch);
 
 fn setup_generator(
     mut commands: Commands,
@@ -368,7 +373,7 @@ fn on_click_piece(
 
 fn move_piece(
     window: Single<&Window>,
-    camera_query: Single<(&Camera, &GlobalTransform)>,
+    camera_query: Single<(&Camera, &GlobalTransform), With<IsDefaultUiCamera>>,
     moveable: Single<(&mut Transform, &MoveStart, &MoveTogether)>,
     mut other_piece: Query<&mut Transform, Without<MoveStart>>,
 ) {
@@ -770,12 +775,14 @@ struct PieceCount;
 #[derive(Component)]
 struct OnPlayScreen;
 
-#[allow(dead_code)]
 fn setup_game_ui(mut commands: Commands, asset_server: Res<AssetServer>, mut already: Local<bool>) {
     if *already {
         return;
     }
     *already = true;
+
+    commands.insert_resource(GameStartTime(Stopwatch::new()));
+
     // let background_color = MAROON.into();
     let root_node = commands
         .spawn((
@@ -1016,6 +1023,21 @@ fn setup_game_ui(mut commands: Commands, asset_server: Res<AssetServer>, mut alr
             // bottom right
             builder.spawn(Node::default()).with_children(|p| {
                 p.spawn((
+                    Text::new("00:00:00"),
+                    TextColor(GREEN.into()),
+                    TimerText,
+                    Node {
+                        margin: UiRect {
+                            top: Val::Px(7.0),
+                            right: Val::Px(10.0),
+                            ..default()
+                        },
+                        ..default()
+                    },
+                ));
+
+                // pause button
+                p.spawn((
                     UiImage::new(asset_server.load("icons/pause.png")),
                     Node {
                         height: Val::Px(40.),
@@ -1033,6 +1055,7 @@ fn setup_game_ui(mut commands: Commands, asset_server: Res<AssetServer>, mut alr
                         game_state.set(GameState::Pause)
                     },
                 );
+                // fullscreen button
                 p.spawn((
                     UiImage::new(asset_server.load("icons/fullscreen.png")),
                     Node {
@@ -1055,6 +1078,9 @@ fn setup_game_ui(mut commands: Commands, asset_server: Res<AssetServer>, mut alr
 
     commands.send_event(Shuffle::Random);
 }
+
+#[derive(Component)]
+struct TimerText;
 
 #[derive(Component)]
 pub struct BoardBackgroundImage;
@@ -1091,6 +1117,20 @@ fn adjust_camera_scale(
             camera_2d.scale = new_scale;
         }
     }
+}
+
+fn update_game_time(
+    mut game_timer: ResMut<GameStartTime>,
+    time: Res<Time>,
+    mut text: Single<&mut Text, With<TimerText>>,
+) {
+    game_timer.tick(time.delta());
+    let elapsed = game_timer.elapsed();
+    let seconds = elapsed.as_secs();
+    let minutes = seconds / 60;
+    let hours = minutes / 60;
+    let time = format!("{:02}:{:02}:{:02}", hours, minutes % 60, seconds % 60);
+    text.0 = time;
 }
 
 fn handle_keyboard_input(keyboard_input: Res<ButtonInput<KeyCode>>, mut commands: Commands) {

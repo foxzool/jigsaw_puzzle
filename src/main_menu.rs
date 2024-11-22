@@ -81,12 +81,6 @@ fn show_title(
     anime_camera: Res<AnimeCamera>,
     old_title: Query<Entity, With<AnimationTarget>>,
 ) {
-    println!(
-        "Setting up menu screen {}x{}",
-        window.width(),
-        window.height()
-    );
-
     for entity in old_title.iter() {
         commands.entity(entity).despawn_recursive();
     }
