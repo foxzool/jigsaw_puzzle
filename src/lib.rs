@@ -71,7 +71,7 @@ pub const ANIMATION_LAYERS: RenderLayers = RenderLayers::layer(1);
 #[derive(Debug, Resource, Deref, DerefMut)]
 pub struct OriginImage(pub Handle<Image>);
 
-#[derive(Debug, Component, Deref, DerefMut)]
+#[derive(Debug, Component, Deref, DerefMut, Clone)]
 pub struct Piece(pub JigsawPiece);
 
 // Generic system that takes a component as a parameter, and will despawn all entities with that component

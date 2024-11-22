@@ -536,7 +536,7 @@ pub fn generate_columns_rows_numbers(
 ///
 /// `seed` provides the initial "randomness" when creating the contours of the puzzle pieces. Same
 /// seed values for images with same dimensions and same number of pieces lead to same SVG paths.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct JigsawGenerator {
     /// The original image from which the jigsaw puzzle pieces will be generated.
     origin_image: DynamicImage,

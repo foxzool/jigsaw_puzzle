@@ -12,9 +12,10 @@ use bevy::utils::HashSet;
 use bevy::window::WindowMode;
 use flume::{bounded, Receiver};
 use jigsaw_puzzle_generator::image::GenericImageView;
-use jigsaw_puzzle_generator::{GameMode, JigsawGenerator, JigsawPiece};
+use jigsaw_puzzle_generator::{GameMode, JigsawGenerator, JigsawPiece, JigsawTemplate};
 use log::debug;
 use rand::Rng;
+use std::ops::{Deref, DerefMut};
 use std::time::Duration;
 
 pub(super) fn plugin(app: &mut App) {
@@ -283,8 +284,11 @@ fn setup_generator(
 #[derive(Component)]
 pub struct OnGeneratingScreen;
 
-#[derive(Debug, Resource, Deref, DerefMut)]
+#[derive(Debug, Resource, Deref, DerefMut, Clone)]
 pub struct JigsawPuzzleGenerator(pub JigsawGenerator);
+
+#[derive(Debug, Resource, Deref, DerefMut)]
+pub struct JigsawPuzzleTemplate(pub JigsawTemplate);
 
 #[derive(Component)]
 struct CropTask(Receiver<CommandQueue>);
@@ -300,9 +304,10 @@ fn spawn_piece(mut commands: Commands, generator: Res<JigsawPuzzleGenerator>) {
     debug!("Start to generate pieces");
     let start = std::time::Instant::now();
     if let Ok(template) = generator.generate(GameMode::Classic, false) {
+        // commands.insert_resource(JigsawPuzzleTemplate(template.clone()));
+        let mut wait_crops = vec![];
         let (tx, rx) = bounded(template.pieces.len());
         for piece in template.pieces.iter() {
-            let template_clone = template.clone();
             let piece_clone = piece.clone();
 
             // let calc_position = random_position(&piece, window.resolution.size(), camera.scale);
@@ -325,78 +330,82 @@ fn spawn_piece(mut commands: Commands, generator: Res<JigsawPuzzleGenerator>) {
                 .observe(on_not_selected)
                 .id();
 
-            let sender = tx.clone();
+            wait_crops.push((entity, piece_clone));
+            commands.entity(entity).insert(CropTask(rx.clone()));
+        }
 
+        if !wait_crops.is_empty() {
+            let template_clone = template.clone();
             std::thread::spawn(move || {
-                let mut command_queue = CommandQueue::default();
-                let cropped_image = piece_clone.crop(&template_clone.origin_image);
-                let white_image = piece_clone.fill_white(&cropped_image);
+                for (entity, piece) in wait_crops {
+                    let mut command_queue = CommandQueue::default();
+                    let cropped_image = piece.crop(&template_clone.origin_image);
+                    let white_image = piece.fill_white(&cropped_image);
+                    command_queue.push(move |mut world: &mut World| {
+                        let mut assets = world.deref_mut().resource_mut::<Assets<Image>>();
+                        let image = assets.add(Image::from_dynamic(
+                            cropped_image,
+                            true,
+                            RenderAssetUsages::RENDER_WORLD,
+                        ));
+                        let white_image = assets.add(Image::from_dynamic(
+                            white_image,
+                            true,
+                            RenderAssetUsages::RENDER_WORLD,
+                        ));
+                        let color_sprite = Sprite {
+                            image,
+                            anchor: Anchor::TopLeft,
+                            custom_size: Some(Vec2::new(
+                                piece.crop_width as f32,
+                                piece.crop_height as f32,
+                            )),
+                            ..default()
+                        };
 
-                command_queue.push(move |world: &mut World| {
-                    let mut assets = world.resource_mut::<Assets<Image>>();
-                    let image = assets.add(Image::from_dynamic(
-                        cropped_image,
-                        true,
-                        RenderAssetUsages::RENDER_WORLD,
-                    ));
-                    let white_image = assets.add(Image::from_dynamic(
-                        white_image,
-                        true,
-                        RenderAssetUsages::RENDER_WORLD,
-                    ));
-                    let color_sprite = Sprite {
-                        image,
-                        anchor: Anchor::TopLeft,
-                        custom_size: Some(Vec2::new(
-                            piece_clone.crop_width as f32,
-                            piece_clone.crop_height as f32,
-                        )),
-                        ..default()
-                    };
+                        let color_id = world
+                            .spawn((
+                                ColorImage,
+                                color_sprite,
+                                Transform::from_xyz(
+                                    -piece.calc_offset().0,
+                                    piece.calc_offset().1,
+                                    0.0,
+                                ),
+                            ))
+                            .id();
+                        let white_sprite = Sprite {
+                            image: white_image,
+                            anchor: Anchor::TopLeft,
+                            custom_size: Some(Vec2::new(
+                                piece.crop_width as f32,
+                                piece.crop_height as f32,
+                            )),
+                            ..default()
+                        };
+                        let white_id = world
+                            .spawn((
+                                WhiteImage,
+                                white_sprite,
+                                Transform::from_xyz(
+                                    -piece.calc_offset().0,
+                                    piece.calc_offset().1,
+                                    -1.0,
+                                ),
+                            ))
+                            .id();
 
-                    let color_id = world
-                        .spawn((
-                            ColorImage,
-                            color_sprite,
-                            Transform::from_xyz(
-                                -piece_clone.calc_offset().0,
-                                piece_clone.calc_offset().1,
-                                0.0,
-                            ),
-                        ))
-                        .id();
-                    let white_sprite = Sprite {
-                        image: white_image,
-                        anchor: Anchor::TopLeft,
-                        custom_size: Some(Vec2::new(
-                            piece_clone.crop_width as f32,
-                            piece_clone.crop_height as f32,
-                        )),
-                        ..default()
-                    };
-                    let white_id = world
-                        .spawn((
-                            WhiteImage,
-                            white_sprite,
-                            Transform::from_xyz(
-                                -piece_clone.calc_offset().0,
-                                piece_clone.calc_offset().1,
-                                -1.0,
-                            ),
-                        ))
-                        .id();
+                        world
+                            .entity_mut(entity)
+                            .add_children(&[color_id, white_id])
+                            .remove::<CropTask>();
+                    });
 
-                    world
-                        .entity_mut(entity)
-                        .add_children(&[color_id, white_id])
-                        .remove::<CropTask>();
-                });
-
-                sender.send(command_queue).unwrap();
+                    tx.send(command_queue).unwrap();
+                }
             });
         }
 
-        commands.spawn(CropTask(rx.clone()));
         debug!("Time to generate pieces: {:?}", start.elapsed());
         commands.send_event(Shuffle::Random);
     };
