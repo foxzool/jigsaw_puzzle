@@ -32,7 +32,7 @@ pub(super) fn plugin(app: &mut App) {
     // generation piece
     app.add_systems(
         OnEnter(GameState::Generating),
-        (setup_generator, setup_generating_ui).chain(),
+        (setup_generator, setup_generating_ui, spawn_piece).chain(),
     )
     .add_systems(
         OnExit(GameState::Generating),
@@ -41,11 +41,7 @@ pub(super) fn plugin(app: &mut App) {
     .add_systems(Update, (adjust_camera_on_added_sprite,))
     .add_systems(
         PostUpdate,
-        (
-            spawn_piece.run_if(resource_changed::<JigsawPuzzleGenerator>),
-            handle_tasks,
-        )
-            .run_if(in_state(GameState::Generating)),
+        (handle_tasks, count_spawned_piece).run_if(in_state(GameState::Generating)),
     );
 
     // pause logic
@@ -168,7 +164,7 @@ fn setup_finish_ui(
                 TextColor(Color::srgb(0.9, 0.9, 0.9)),
             ))
             .observe(
-                |trigger: Trigger<Pointer<Click>>, mut next_state: ResMut<NextState<AppState>>| {
+                |_trigger: Trigger<Pointer<Click>>, mut next_state: ResMut<NextState<AppState>>| {
                     next_state.set(AppState::MainMenu);
                 },
             );
@@ -301,6 +297,7 @@ struct ColorImage;
 
 /// Spawn the pieces of the jigsaw puzzle
 fn spawn_piece(mut commands: Commands, generator: Res<JigsawPuzzleGenerator>) {
+    debug!("Start to generate pieces");
     let start = std::time::Instant::now();
     if let Ok(template) = generator.generate(GameMode::Classic, false) {
         let (tx, rx) = bounded(template.pieces.len());
@@ -427,24 +424,24 @@ fn init_position(piece: &JigsawPiece, origin_image_size: (u32, u32)) -> Vec2 {
     )
 }
 
-fn handle_tasks(
-    mut commands: Commands,
-    mut crop_tasks: Query<&CropTask>,
-    mut loaded_pieces: Local<usize>,
-    generator: Res<JigsawPuzzleGenerator>,
-    mut game_state: ResMut<NextState<GameState>>,
-    mut text: Single<&mut Text, With<PieceCount>>,
-) {
+fn handle_tasks(mut commands: Commands, mut crop_tasks: Query<&CropTask>) {
     for task in crop_tasks.iter_mut() {
         for mut queue in task.0.try_iter() {
             commands.append(&mut queue);
-            *loaded_pieces += 1;
         }
-        text.0 = format!("{}/{}", *loaded_pieces, generator.pieces_count());
+    }
+}
 
-        if *loaded_pieces == generator.pieces_count() {
-            game_state.set(GameState::Play)
-        }
+fn count_spawned_piece(
+    mut text: Single<&mut Text, With<PieceCount>>,
+    generator: Res<JigsawPuzzleGenerator>,
+    mut game_state: ResMut<NextState<GameState>>,
+    q_pieces: Query<Entity, With<ColorImage>>,
+) {
+    let loaded_pieces = q_pieces.iter().count();
+    text.0 = format!("{}/{}", loaded_pieces, generator.pieces_count());
+    if loaded_pieces == generator.pieces_count() {
+        game_state.set(GameState::Play)
     }
 }
 
@@ -917,12 +914,14 @@ struct PieceCount;
 #[derive(Component)]
 struct OnPlayScreen;
 
-fn setup_game_ui(mut commands: Commands, asset_server: Res<AssetServer>, mut already: Local<bool>) {
-    if *already {
+fn setup_game_ui(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    q_node: Query<Entity, With<MenuIcon>>,
+) {
+    if !q_node.is_empty() {
         return;
     }
-    *already = true;
-
     commands.insert_resource(GameTimer(Stopwatch::new()));
 
     // let background_color = MAROON.into();

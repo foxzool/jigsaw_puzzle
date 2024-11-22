@@ -12,7 +12,7 @@ pub(crate) fn menu_plugin(app: &mut App) {
         .init_resource::<Dragging>()
         .add_systems(
             OnEnter(AppState::MainMenu),
-            (setup_menu, load_default_images).chain(),
+            (setup_menu, load_default_images, load_anime).chain(),
         )
         .add_systems(
             Update,
@@ -138,7 +138,7 @@ fn show_title(
             TextColor(BLACK.into()),
             ANIMATION_LAYERS,
             TargetCamera(**anime_camera),
-            Transform::from_xyz(start_pos.0, start_pos.1, 0.0),
+            Transform::from_xyz(start_pos.0, start_pos.1, 1.0),
             // Transform::from_xyz(0.0, 0.0, 0.0),
             title,
             AnimationGraphHandle(graphs.add(graph)),
@@ -503,6 +503,10 @@ fn load_default_images(asset_server: Res<AssetServer>, mut loaded_images: ResMut
 
         loaded_images.0.push(image_handle);
     }
+}
+
+fn load_anime(mut commands: Commands) {
+    commands.trigger(ShowTitleAnime);
 }
 
 fn menu_countdown(

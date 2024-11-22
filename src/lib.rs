@@ -41,8 +41,9 @@ impl Plugin for PuzzlePlugin {
 /// The state of the application.
 #[derive(Clone, Copy, Default, Eq, PartialEq, Debug, Hash, States)]
 pub enum AppState {
-    MainMenu,
     #[default]
+    MainMenu,
+
     Gameplay,
 }
 

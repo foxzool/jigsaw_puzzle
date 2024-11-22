@@ -18,6 +18,7 @@ use std::vec;
 
 pub use image;
 pub use imageproc;
+use rand::random;
 
 const DEFAULT_TAB_SIZE: f32 = 20.0;
 const DEFAULT_JITTER: f32 = 5.0;
@@ -559,7 +560,7 @@ impl JigsawGenerator {
             pieces_in_row,
             tab_size: None,
             jitter: None,
-            seed: None,
+            seed: Some(random()),
         }
     }
 
