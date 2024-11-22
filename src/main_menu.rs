@@ -1,6 +1,6 @@
 use crate::{
     despawn_screen, AnimeCamera, AppState, OriginImage, SelectGameMode, SelectPiece,
-    ANIMATION_LAYERS,
+    ANIMATION_LAYERS, HOVERED_BUTTON, NORMAL_BUTTON, PRESSED_BUTTON,
 };
 use bevy::animation::{AnimationTarget, AnimationTargetId};
 use bevy::color::palettes::basic::BLACK;
@@ -30,10 +30,6 @@ pub(crate) fn menu_plugin(app: &mut App) {
         .add_systems(OnExit(AppState::MainMenu), despawn_screen::<OnMenuScreen>)
         .add_observer(show_title);
 }
-
-const NORMAL_BUTTON: Color = Color::srgb(0.15, 0.15, 0.15);
-const HOVERED_BUTTON: Color = Color::srgb(0.25, 0.25, 0.25);
-const PRESSED_BUTTON: Color = Color::srgb(0.35, 0.75, 0.35);
 
 #[derive(Component)]
 struct OnMenuScreen;

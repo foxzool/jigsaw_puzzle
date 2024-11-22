@@ -1,3 +1,4 @@
+use crate::NORMAL_BUTTON;
 use crate::{despawn_screen, GameState};
 use crate::{AppState, OriginImage, Piece, SelectGameMode, SelectPiece};
 use bevy::asset::RenderAssetUsages;
@@ -77,6 +78,132 @@ pub(super) fn plugin(app: &mut App) {
                 .run_if(in_state(GameState::Play)),
         )
         .add_observer(combine_together);
+
+    // finish
+    app.add_systems(
+        OnEnter(GameState::Finish),
+        (despawn_screen::<OnPlayScreen>, setup_finish_ui),
+    )
+    .add_systems(OnExit(GameState::Finish), despawn_screen::<OnFinishScreen>);
+}
+
+#[derive(Component)]
+struct OnFinishScreen;
+
+fn setup_finish_ui(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    game_timer: Res<GameTimer>,
+    select_game_mode: Res<SelectGameMode>,
+    select_piece: Res<SelectPiece>,
+) {
+    commands
+        .spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                display: Display::Flex,
+                flex_direction: FlexDirection::Column,
+                align_content: AlignContent::Center,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            BackgroundColor(Color::srgb_u8(149, 165, 166)),
+            OnFinishScreen,
+        ))
+        .with_children(|p| {
+            let font = asset_server.load("fonts/MinecraftEvenings.ttf");
+            let text_font = TextFont {
+                font: font.clone(),
+                font_size: 60.0,
+                ..default()
+            };
+
+            p.spawn((Text::new("Finish"), TextColor(Color::BLACK), text_font));
+            p.spawn((
+                Text::new(format!(
+                    "{} pieces {}",
+                    select_piece.to_string(),
+                    select_game_mode.to_string()
+                )),
+                TextColor(Color::BLACK),
+                Node {
+                    margin: UiRect::all(Val::Px(5.0)),
+                    ..default()
+                },
+            ));
+            p.spawn((
+                Text::new(format!("Use time: {}", game_timer.to_string())),
+                TextColor(Color::BLACK),
+                Node {
+                    margin: UiRect::all(Val::Px(5.0)),
+                    ..default()
+                },
+            ));
+            p.spawn((
+                Button,
+                Node {
+                    width: Val::Px(100.0),
+                    height: Val::Px(40.0),
+                    border: UiRect::all(Val::Px(5.0)),
+                    margin: UiRect::all(Val::Px(5.0)),
+                    // horizontally center child text
+                    justify_content: JustifyContent::Center,
+                    // vertically center child text
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                BorderColor(Color::BLACK),
+                BorderRadius::MAX,
+                BackgroundColor(NORMAL_BUTTON),
+            ))
+            .with_child((
+                Text::new("Menu"),
+                TextFont {
+                    font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                    font_size: 22.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.9, 0.9, 0.9)),
+            ))
+            .observe(
+                |trigger: Trigger<Pointer<Click>>, mut next_state: ResMut<NextState<AppState>>| {
+                    next_state.set(AppState::MainMenu);
+                },
+            );
+
+            p.spawn((
+                Button,
+                Node {
+                    width: Val::Px(100.0),
+                    height: Val::Px(40.0),
+                    margin: UiRect::all(Val::Px(5.0)),
+                    border: UiRect::all(Val::Px(5.0)),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                BorderColor(Color::BLACK),
+                BorderRadius::MAX,
+                BackgroundColor(NORMAL_BUTTON),
+            ))
+            .with_child((
+                Text::new("Again"),
+                TextFont {
+                    font: asset_server.load("fonts/FiraSans-Bold.ttf"),
+                    font_size: 22.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.9, 0.9, 0.9)),
+            ))
+            .observe(
+                |_trigger: Trigger<Pointer<Click>>,
+                 mut next_state: ResMut<NextState<GameState>>| {
+                    next_state.set(GameState::Setup);
+                },
+            );
+        });
 }
 
 fn setup_game(
@@ -108,7 +235,21 @@ fn exit_app_gameplay(mut game_state: ResMut<NextState<GameState>>) {
 }
 
 #[derive(Resource, Deref, DerefMut, Debug)]
-pub struct GameStartTime(pub Stopwatch);
+pub struct GameTimer(pub Stopwatch);
+
+impl std::fmt::Display for GameTimer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let elapsed = self.elapsed();
+        let seconds = elapsed.as_secs();
+        let minutes = seconds / 60;
+        let hours = minutes / 60;
+        write!(
+            f,
+            "{}",
+            format!("{:02}:{:02}:{:02}", hours, minutes % 60, seconds % 60)
+        )
+    }
+}
 
 fn setup_generator(
     mut commands: Commands,
@@ -175,6 +316,7 @@ fn spawn_piece(mut commands: Commands, generator: Res<JigsawPuzzleGenerator>) {
                     MoveTogether::default(),
                     Transform::from_xyz(calc_position.x, calc_position.y, piece.index as f32),
                     Visibility::Visible,
+                    OnPlayScreen,
                 ))
                 .observe(on_click_piece)
                 .observe(on_move_end)
@@ -781,7 +923,7 @@ fn setup_game_ui(mut commands: Commands, asset_server: Res<AssetServer>, mut alr
     }
     *already = true;
 
-    commands.insert_resource(GameStartTime(Stopwatch::new()));
+    commands.insert_resource(GameTimer(Stopwatch::new()));
 
     // let background_color = MAROON.into();
     let root_node = commands
@@ -1120,20 +1262,19 @@ fn adjust_camera_scale(
 }
 
 fn update_game_time(
-    mut game_timer: ResMut<GameStartTime>,
+    mut game_timer: ResMut<GameTimer>,
     time: Res<Time>,
     mut text: Single<&mut Text, With<TimerText>>,
 ) {
     game_timer.tick(time.delta());
-    let elapsed = game_timer.elapsed();
-    let seconds = elapsed.as_secs();
-    let minutes = seconds / 60;
-    let hours = minutes / 60;
-    let time = format!("{:02}:{:02}:{:02}", hours, minutes % 60, seconds % 60);
-    text.0 = time;
+    text.0 = game_timer.to_string();
 }
 
-fn handle_keyboard_input(keyboard_input: Res<ButtonInput<KeyCode>>, mut commands: Commands) {
+fn handle_keyboard_input(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    mut commands: Commands,
+    mut game_state: ResMut<NextState<GameState>>,
+) {
     if keyboard_input.just_pressed(KeyCode::PageUp) {
         commands.send_event(AdjustScale(0.1));
     } else if keyboard_input.just_pressed(KeyCode::PageDown) {
@@ -1146,6 +1287,8 @@ fn handle_keyboard_input(keyboard_input: Res<ButtonInput<KeyCode>>, mut commands
         commands.send_event(Shuffle::Edge);
     } else if keyboard_input.just_pressed(KeyCode::KeyR) {
         commands.send_event(Shuffle::Random);
+    } else if keyboard_input.just_pressed(KeyCode::KeyQ) {
+        game_state.set(GameState::Finish);
     }
 }
 
