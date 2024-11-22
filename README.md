@@ -7,6 +7,10 @@ This is a simple jigsaw puzzle game that I created using bevy.
 ![Pasted image 20241120183635](https://github.com/user-attachments/assets/c829f846-7a26-4c3c-a618-fead3c8ee323)
 
 
+https://github.com/user-attachments/assets/ab4e0c1d-6b2a-4b22-bcbe-f72c838096e3
+
+
+
 
 ## keys
 
