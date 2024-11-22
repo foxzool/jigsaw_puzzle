@@ -548,6 +548,7 @@ fn on_move_end(
     generator: Res<JigsawPuzzleGenerator>,
     mut query: Query<(Entity, &Piece, &mut Transform, &mut MoveTogether)>,
     mut commands: Commands,
+    mut next_state: ResMut<NextState<GameState>>,
 ) {
     let mut iter = query.iter_combinations_mut();
     let end_entity = trigger.entity();
@@ -625,6 +626,7 @@ fn on_move_end(
 
     if all_entities.len() == generator.pieces_count() {
         debug!("All pieces have been merged");
+        next_state.set(GameState::Finish);
     }
 
     if let Ok((_e, _p, mut transform, _together)) = query.get_mut(trigger.entity()) {
@@ -964,6 +966,22 @@ fn setup_game_ui(
                         // BackgroundColor(BLUE.into()),
                     ))
                     .with_children(|builder| {
+                        // exit button
+                        builder
+                            .spawn((
+                                UiImage::new(asset_server.load("icons/cross.png")),
+                                Node {
+                                    height: Val::Px(40.),
+                                    ..default()
+                                },
+                                MenuIcon,
+                            ))
+                            .observe(
+                                |_trigger: Trigger<Pointer<Click>>, mut next_state: ResMut<NextState<GameState>>| {
+                                    next_state.set(GameState::Finish);
+                                },);
+
+                        // shuffle button
                         builder
                             .spawn((
                                 UiImage::new(asset_server.load("icons/four-arrows.png")),
