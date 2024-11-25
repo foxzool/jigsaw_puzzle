@@ -10,13 +10,13 @@ use bevy::sprite::Anchor;
 use bevy::time::Stopwatch;
 use bevy::utils::HashSet;
 use bevy::window::WindowMode;
+use core::ops::DerefMut;
+use core::time::Duration;
 use flume::{bounded, Receiver};
 use jigsaw_puzzle_generator::image::GenericImageView;
 use jigsaw_puzzle_generator::{JigsawGenerator, JigsawPiece, JigsawTemplate};
 use log::debug;
 use rand::Rng;
-use std::ops::DerefMut;
-use std::time::Duration;
 
 pub(super) fn plugin(app: &mut App) {
     // app state
@@ -127,7 +127,7 @@ fn setup_finish_ui(
                 },
             ));
             p.spawn((
-                Text::new(format!("Use time: {}", game_timer.to_string())),
+                Text::new(format!("Use time: {}", *game_timer)),
                 TextColor(Color::BLACK),
                 Node {
                     margin: UiRect::all(Val::Px(5.0)),
@@ -230,17 +230,13 @@ fn exit_app_gameplay(mut game_state: ResMut<NextState<GameState>>) {
 #[derive(Resource, Deref, DerefMut, Debug)]
 pub struct GameTimer(pub Stopwatch);
 
-impl std::fmt::Display for GameTimer {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for GameTimer {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let elapsed = self.elapsed();
         let seconds = elapsed.as_secs();
         let minutes = seconds / 60;
         let hours = minutes / 60;
-        write!(
-            f,
-            "{}",
-            format!("{:02}:{:02}:{:02}", hours, minutes % 60, seconds % 60)
-        )
+        write!(f, "{:02}:{:02}:{:02}", hours, minutes % 60, seconds % 60)
     }
 }
 
@@ -251,7 +247,7 @@ fn setup_generator(
     select_piece: Res<SelectPiece>,
 ) {
     let image = images.get(&origin_image.0).unwrap();
-    let (columns, rows) = select_piece.to_columns_rows();
+    let (columns, rows) = select_piece.get_columns_rows();
     let width = image.texture_descriptor.size.width;
     let height = image.texture_descriptor.size.height;
     let generator = JigsawGenerator::from_rgba8(width, height, &image.data, columns, rows)
@@ -450,7 +446,7 @@ fn count_spawned_piece(
     let loaded_pieces = q_pieces.iter().count();
     text.0 = format!("{}/{}", loaded_pieces, generator.pieces_count());
     if loaded_pieces == generator.pieces_count() {
-        game_state.set(GameState::Play)
+        game_state.set(GameState::Play);
     }
 }
 
@@ -793,14 +789,13 @@ fn shuffle_pieces(
         match event {
             Shuffle::Random => {
                 for (piece, mut transform) in &mut query.iter_mut() {
-                    let random_pos =
-                        random_position(&piece, window.resolution.size(), camera.scale);
+                    let random_pos = random_position(piece, window.resolution.size(), camera.scale);
                     transform.translation = random_pos.extend(piece.index as f32);
                 }
             }
             Shuffle::Edge => {
                 for (piece, mut transform) in &mut query.iter_mut() {
-                    let edge_pos = edge_position(&piece, window.resolution.size(), camera.scale);
+                    let edge_pos = edge_position(piece, window.resolution.size(), camera.scale);
                     transform.translation = edge_pos.extend(piece.index as f32);
                 }
             }
@@ -1220,7 +1215,7 @@ fn setup_game_ui(
                 .observe(
                     |_trigger: Trigger<Pointer<Click>>,
                      mut game_state: ResMut<NextState<GameState>>| {
-                        game_state.set(GameState::Pause)
+                        game_state.set(GameState::Pause);
                     },
                 );
                 // fullscreen button
@@ -1370,7 +1365,7 @@ fn handle_toggle_puzzle_hint(
                 if move_together.len() > 0 {
                     continue 'f2;
                 }
-                if first_piece.beside(&piece) {
+                if first_piece.beside(piece) {
                     second_entity = Some(entity);
                     break 'f2;
                 }
@@ -1425,7 +1420,6 @@ fn handle_puzzle_hint(
 fn hint_image_click(
     _trigger: Trigger<Pointer<Click>>,
     mut commands: Commands,
-    // top_right: Single<Entity, With<TopRightNode>>,
     mut hint_visible: Single<
         &mut Visibility,
         (

@@ -67,6 +67,7 @@ impl AnimatableProperty for TextColorProperty {
 #[derive(Component)]
 struct HiddenItem;
 
+#[allow(clippy::too_many_arguments)]
 fn show_title(
     _trigger: Trigger<ShowTitleAnime>,
     mut commands: Commands,
@@ -396,7 +397,7 @@ fn setup_menu(
                 .observe(
                     |_trigger: Trigger<Pointer<Click>>,
                      mut app_state: ResMut<NextState<AppState>>| {
-                        app_state.set(AppState::Gameplay)
+                        app_state.set(AppState::Gameplay);
                     },
                 );
             });
@@ -528,31 +529,20 @@ fn menu_countdown(
 }
 
 fn button_interaction(
-    mut interaction_query: Query<
-        (
-            &Interaction,
-            &mut BackgroundColor,
-            &mut BorderColor,
-            &Children,
-        ),
-        (Changed<Interaction>, With<Button>),
-    >,
+    interaction_query: Query<(&Interaction, &Children), (Changed<Interaction>, With<Button>)>,
     mut text_query: Query<&mut TextColor>,
 ) {
-    for (interaction, _color, _border_color, children) in &mut interaction_query {
+    for (interaction, children) in interaction_query.iter() {
         let mut text_color = text_query.get_mut(children[0]).unwrap();
         match *interaction {
             Interaction::Pressed => {
                 text_color.0 = PRESSED_BUTTON;
             }
             Interaction::Hovered => {
-                // *color = Color::srgb(0.8, 0.8, 0.8).into();
                 text_color.0 = HOVERED_BUTTON;
             }
             Interaction::None => {
                 text_color.0 = NORMAL_BUTTON;
-                // *color = Color::srgba(0.0, 0.0, 0.0, 0.0).into();
-                // border_color.0 = Color::BLACK;
             }
         }
     }

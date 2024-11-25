@@ -681,7 +681,8 @@ impl JigsawGenerator {
                 let (top_index, right_index, bottom_index, left_index) =
                     get_border_indices(i, pieces_in_column);
 
-                debug!("starting process piece {i} {top_index} {right_index} {bottom_index} {left_index}");
+                // debug!("starting process piece {i} {top_index} {right_index} {bottom_index} {left_index}");
+                debug!("starting process piece {i}");
 
                 let is_boarder = i < pieces_in_column
                     || i >= (pieces_in_column * (pieces_in_row - 1))
@@ -937,6 +938,7 @@ pub struct JigsawPiece {
 }
 
 impl JigsawPiece {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         index: usize,
         start_point: (f32, f32),

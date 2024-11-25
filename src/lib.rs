@@ -1,8 +1,7 @@
 use bevy::prelude::*;
 use bevy::render::view::RenderLayers;
+use core::fmt::Formatter;
 use jigsaw_puzzle_generator::{GameMode, JigsawPiece};
-use std::fmt;
-use std::fmt::Formatter;
 
 mod gameplay;
 mod main_menu;
@@ -110,8 +109,8 @@ enum SelectPiece {
     P500,
 }
 
-impl fmt::Display for SelectPiece {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl core::fmt::Display for SelectPiece {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
             "{}",
@@ -131,7 +130,7 @@ impl fmt::Display for SelectPiece {
 }
 
 impl SelectPiece {
-    fn to_columns_rows(&self) -> (usize, usize) {
+    fn get_columns_rows(&self) -> (usize, usize) {
         match self {
             SelectPiece::P20 => (5, 4),
             SelectPiece::P50 => (10, 5),
@@ -177,8 +176,8 @@ impl SelectPiece {
 #[derive(Debug, Resource, Deref, DerefMut, Default)]
 pub struct SelectGameMode(pub GameMode);
 
-impl fmt::Display for SelectGameMode {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl core::fmt::Display for SelectGameMode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
             "{}",
