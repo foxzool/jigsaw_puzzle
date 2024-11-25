@@ -10,3 +10,5 @@ Cargo.lock
 /tiles
 /images
 jigsaw_puzzle_generator/target
+dist/*
+!dist/index.html
