@@ -637,7 +637,7 @@ impl JigsawGenerator {
         self.pieces_in_column * self.pieces_in_row
     }
 
-    pub fn generate(&self, _game_mode: GameMode, resize: bool) -> Result<JigsawTemplate> {
+    pub fn generate(&self, game_mode: GameMode, resize: bool) -> Result<JigsawTemplate> {
         let target_image = if resize {
             scale_image(&self.origin_image)
         } else {
@@ -655,7 +655,7 @@ impl JigsawGenerator {
         let (starting_points_x, piece_width) = divide_axis(image_width, pieces_in_column);
         let (starting_points_y, piece_height) = divide_axis(image_height, pieces_in_row);
 
-        let (vertical_edges, horizontal_edges) = match _game_mode {
+        let (vertical_edges, horizontal_edges) = match game_mode {
             GameMode::Classic => self.classic_generator(
                 image_width,
                 image_height,
@@ -678,9 +678,16 @@ impl JigsawGenerator {
         let mut i = 0;
         for y in starting_points_y.iter() {
             for x in starting_points_x.iter() {
-                debug!("starting process piece {i}");
                 let (top_index, right_index, bottom_index, left_index) =
                     get_border_indices(i, pieces_in_column);
+
+                debug!("starting process piece {i} {top_index} {right_index} {bottom_index} {left_index}");
+
+                let is_boarder = i < pieces_in_column
+                    || i >= (pieces_in_column * (pieces_in_row - 1))
+                    || i % pieces_in_column == 0
+                    || i % pieces_in_column == (pieces_in_column - 1);
+
                 let piece = JigsawPiece::new(
                     i,
                     (*x, *y),
@@ -690,6 +697,7 @@ impl JigsawGenerator {
                     vertical_edges[right_index].clone(),
                     horizontal_edges[bottom_index].clone(),
                     vertical_edges[left_index].clone(),
+                    is_boarder,
                 )?;
 
                 // draw debug line
@@ -925,6 +933,7 @@ pub struct JigsawPiece {
     pub right_edge: Edge,
     pub bottom_edge: Edge,
     pub left_edge: Edge,
+    pub is_boarder: bool,
 }
 
 impl JigsawPiece {
@@ -937,6 +946,7 @@ impl JigsawPiece {
         right_edge: Edge,
         bottom_edge: Edge,
         left_edge: Edge,
+        is_boarder: bool,
     ) -> Result<Self> {
         let top_beziers = top_edge.to_beziers(false);
         let right_beziers = right_edge.to_beziers(false);
@@ -978,6 +988,7 @@ impl JigsawPiece {
             right_edge,
             bottom_edge,
             left_edge,
+            is_boarder,
         })
     }
 
@@ -1152,11 +1163,8 @@ impl JigsawPiece {
             || self.on_the_right_side(other)
     }
 
-    pub fn is_edge(&self) -> bool {
-        matches!(self.top_edge, Edge::StraightEdge(_))
-            || matches!(self.right_edge, Edge::StraightEdge(_))
-            || matches!(self.bottom_edge, Edge::StraightEdge(_))
-            || matches!(self.left_edge, Edge::StraightEdge(_))
+    pub fn is_boarder(&self) -> bool {
+        self.is_boarder
     }
 
     /// Checks if a given point is inside the puzzle piece

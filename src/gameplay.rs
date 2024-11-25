@@ -1410,7 +1410,7 @@ fn handle_puzzle_hint(
             }
         } else {
             for (piece, mut visibility) in piece_query.iter_mut() {
-                if piece.is_edge() {
+                if piece.is_boarder() {
                     *visibility = Visibility::Visible;
                 } else {
                     *visibility = Visibility::Hidden;
