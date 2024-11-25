@@ -721,9 +721,9 @@ impl JigsawGenerator {
         &self,
         image_width: f32,
         image_height: f32,
-        starting_points_x: &Vec<f32>,
+        starting_points_x: &[f32],
         _piece_width: f32,
-        starting_points_y: &Vec<f32>,
+        starting_points_y: &[f32],
         _piece_height: f32,
     ) -> (Vec<Edge>, Vec<Edge>) {
         let mut vertical_edges = vec![];
@@ -735,13 +735,13 @@ impl JigsawGenerator {
                 horizontal_edges.push(if top_border {
                     Edge::StraightEdge(StraightEdge {
                         starting_point: (starting_points_x[index_x], 0.0),
-                        end_point: (end_point_pos(index_x, &starting_points_x, image_width), 0.0),
+                        end_point: (end_point_pos(index_x, starting_points_x, image_width), 0.0),
                     })
                 } else {
                     Edge::StraightEdge(StraightEdge {
                         starting_point: (starting_points_x[index_x], starting_points_y[index_y]),
                         end_point: (
-                            end_point_pos(index_x, &starting_points_x, image_width),
+                            end_point_pos(index_x, starting_points_x, image_width),
                             starting_points_y[index_y],
                         ),
                     })
@@ -750,17 +750,14 @@ impl JigsawGenerator {
                 vertical_edges.push(if left_border {
                     Edge::StraightEdge(StraightEdge {
                         starting_point: (0.0, starting_points_y[index_y]),
-                        end_point: (
-                            0.0,
-                            end_point_pos(index_y, &starting_points_y, image_height),
-                        ),
+                        end_point: (0.0, end_point_pos(index_y, starting_points_y, image_height)),
                     })
                 } else {
                     Edge::StraightEdge(StraightEdge {
                         starting_point: (starting_points_x[index_x], starting_points_y[index_y]),
                         end_point: (
                             starting_points_x[index_x],
-                            end_point_pos(index_y, &starting_points_y, image_height),
+                            end_point_pos(index_y, starting_points_y, image_height),
                         ),
                     })
                 });
@@ -775,7 +772,7 @@ impl JigsawGenerator {
                 starting_point: (image_width, starting_points_y[index_y]),
                 end_point: (
                     image_width,
-                    end_point_pos(index_y, &starting_points_y, image_height),
+                    end_point_pos(index_y, starting_points_y, image_height),
                 ),
             }));
         }
@@ -785,7 +782,7 @@ impl JigsawGenerator {
             horizontal_edges.push(Edge::StraightEdge(StraightEdge {
                 starting_point: (starting_points_x[index_x], image_height),
                 end_point: (
-                    end_point_pos(index_x, &starting_points_x, image_width),
+                    end_point_pos(index_x, starting_points_x, image_width),
                     image_height,
                 ),
             }))
@@ -798,9 +795,9 @@ impl JigsawGenerator {
         &self,
         image_width: f32,
         image_height: f32,
-        starting_points_x: &Vec<f32>,
+        starting_points_x: &[f32],
         piece_width: f32,
-        starting_points_y: &Vec<f32>,
+        starting_points_y: &[f32],
         piece_height: f32,
     ) -> (Vec<Edge>, Vec<Edge>) {
         let mut contour_gen = EdgeContourGenerator::new(
@@ -819,13 +816,13 @@ impl JigsawGenerator {
                 horizontal_edges.push(if top_border {
                     Edge::StraightEdge(StraightEdge {
                         starting_point: (starting_points_x[index_x], 0.0),
-                        end_point: (end_point_pos(index_x, &starting_points_x, image_width), 0.0),
+                        end_point: (end_point_pos(index_x, starting_points_x, image_width), 0.0),
                     })
                 } else {
                     Edge::IndentedEdge(IndentedEdge::new(
                         (starting_points_x[index_x], starting_points_y[index_y]),
                         (
-                            end_point_pos(index_x, &starting_points_x, image_width),
+                            end_point_pos(index_x, starting_points_x, image_width),
                             starting_points_y[index_y],
                         ),
                         &mut contour_gen,
@@ -834,17 +831,14 @@ impl JigsawGenerator {
                 vertical_edges.push(if left_border {
                     Edge::StraightEdge(StraightEdge {
                         starting_point: (0.0, starting_points_y[index_y]),
-                        end_point: (
-                            0.0,
-                            end_point_pos(index_y, &starting_points_y, image_height),
-                        ),
+                        end_point: (0.0, end_point_pos(index_y, starting_points_y, image_height)),
                     })
                 } else {
                     Edge::IndentedEdge(IndentedEdge::new(
                         (starting_points_x[index_x], starting_points_y[index_y]),
                         (
                             starting_points_x[index_x],
-                            end_point_pos(index_y, &starting_points_y, image_height),
+                            end_point_pos(index_y, starting_points_y, image_height),
                         ),
                         &mut contour_gen,
                     ))
@@ -857,7 +851,7 @@ impl JigsawGenerator {
                 starting_point: (image_width, starting_points_y[index_y]),
                 end_point: (
                     image_width,
-                    end_point_pos(index_y, &starting_points_y, image_height),
+                    end_point_pos(index_y, starting_points_y, image_height),
                 ),
             }));
         }
@@ -867,7 +861,7 @@ impl JigsawGenerator {
             horizontal_edges.push(Edge::StraightEdge(StraightEdge {
                 starting_point: (starting_points_x[index_x], image_height),
                 end_point: (
-                    end_point_pos(index_x, &starting_points_x, image_width),
+                    end_point_pos(index_x, starting_points_x, image_width),
                     image_height,
                 ),
             }))
