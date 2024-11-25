@@ -2,92 +2,103 @@ name: CI
 
 on:
   push:
-    branches: [main,master]
+    branches: [ master ]
   pull_request:
-    branches: [main,master]
+    branches: [ master ]
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: --deny warnings
+  RUSTDOCFLAGS: --deny warnings
 
 jobs:
-  # Run cargo test
+  # Run tests.
   test:
-    name: Test Suite
+    name: Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - name: Checkout sources
-        uses: actions/checkout@v2
-      - name: Cache
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.toml') }}
-      - name: Install stable toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - name: Install Dependencies
-        run: sudo apt-get update; sudo apt-get install pkg-config libx11-dev libasound2-dev libudev-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
-      - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-  # Run cargo clippy -- -D warnings
-  clippy_check:
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
+
+      - name: Populate target directory from cache
+        uses: Leafwing-Studios/cargo-cache@v2
+        with:
+          sweep-cache: true
+
+      - name: Run tests
+        run: |
+          cargo test --locked --workspace --all-features --all-targets
+          # Workaround for https://github.com/rust-lang/cargo/issues/6669
+          cargo test --locked --workspace --all-features --doc
+
+  # Run clippy lints.
+  clippy:
     name: Clippy
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - name: Checkout sources
-        uses: actions/checkout@v2
-      - name: Cache
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-clippy-${{ hashFiles('**/Cargo.toml') }}
-      - name: Install stable toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          components: clippy
-          override: true
-      - name: Install Dependencies
-        run: sudo apt-get update; sudo apt-get install pkg-config libx11-dev libasound2-dev libudev-dev
-      - name: Run clippy
-        uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: -- -D warnings
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-  # Run cargo fmt --all -- --check
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Install dependencies
+        run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
+
+      - name: Populate target directory from cache
+        uses: Leafwing-Studios/cargo-cache@v2
+        with:
+          sweep-cache: true
+
+      - name: Run clippy lints
+        run: cargo clippy --locked --workspace --all-targets --all-features -- --deny warnings
+
+  # Check formatting.
   format:
     name: Format
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - name: Checkout sources
-        uses: actions/checkout@v2
-      - name: Install stable toolchain
-        uses: actions-rs/toolchain@v1
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          profile: minimal
           components: rustfmt
-          override: true
+
       - name: Run cargo fmt
-        uses: actions-rs/cargo@v1
+        run: cargo fmt --all -- --check
+
+  # Check documentation.
+  doc:
+    name: Docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
+
+      - name: Populate target directory from cache
+        uses: Leafwing-Studios/cargo-cache@v2
         with:
-          command: fmt
-          args: --all -- --check
+          sweep-cache: true
+
+      - name: Check documentation
+        run: cargo doc --locked --workspace --all-features --document-private-items --no-deps
