@@ -654,6 +654,146 @@ impl JigsawGenerator {
         let pieces_in_row = self.pieces_in_row;
         let (starting_points_x, piece_width) = divide_axis(image_width, pieces_in_column);
         let (starting_points_y, piece_height) = divide_axis(image_height, pieces_in_row);
+
+        let (vertical_edges, horizontal_edges) = match _game_mode {
+            GameMode::Classic => self.classic_generator(
+                image_width,
+                image_height,
+                &starting_points_x,
+                piece_width,
+                &starting_points_y,
+                piece_height,
+            ),
+            GameMode::Square => self.square_generator(
+                image_width,
+                image_height,
+                &starting_points_x,
+                piece_width,
+                &starting_points_y,
+                piece_height,
+            ),
+        };
+
+        let mut pieces = vec![];
+        let mut i = 0;
+        for y in starting_points_y.iter() {
+            for x in starting_points_x.iter() {
+                debug!("starting process piece {i}");
+                let (top_index, right_index, bottom_index, left_index) =
+                    get_border_indices(i, pieces_in_column);
+                let piece = JigsawPiece::new(
+                    i,
+                    (*x, *y),
+                    target_image.dimensions(),
+                    (piece_width, piece_height),
+                    horizontal_edges[top_index].clone(),
+                    vertical_edges[right_index].clone(),
+                    horizontal_edges[bottom_index].clone(),
+                    vertical_edges[left_index].clone(),
+                )?;
+
+                // draw debug line
+                // piece.draw_debug_line(&mut scaled_image);
+
+                pieces.push(piece);
+                i += 1;
+            }
+        }
+
+        Ok(JigsawTemplate {
+            pieces,
+            origin_image: target_image,
+            piece_dimensions: (piece_width, piece_height),
+            number_of_pieces: (pieces_in_column, pieces_in_row),
+        })
+    }
+
+    fn square_generator(
+        &self,
+        image_width: f32,
+        image_height: f32,
+        starting_points_x: &Vec<f32>,
+        _piece_width: f32,
+        starting_points_y: &Vec<f32>,
+        _piece_height: f32,
+    ) -> (Vec<Edge>, Vec<Edge>) {
+        let mut vertical_edges = vec![];
+        let mut horizontal_edges = vec![];
+        let mut top_border = true;
+        for index_y in 0..starting_points_y.len() {
+            let mut left_border = true;
+            for index_x in 0..starting_points_x.len() {
+                horizontal_edges.push(if top_border {
+                    Edge::StraightEdge(StraightEdge {
+                        starting_point: (starting_points_x[index_x], 0.0),
+                        end_point: (end_point_pos(index_x, &starting_points_x, image_width), 0.0),
+                    })
+                } else {
+                    Edge::StraightEdge(StraightEdge {
+                        starting_point: (starting_points_x[index_x], starting_points_y[index_y]),
+                        end_point: (
+                            end_point_pos(index_x, &starting_points_x, image_width),
+                            starting_points_y[index_y],
+                        ),
+                    })
+                });
+
+                vertical_edges.push(if left_border {
+                    Edge::StraightEdge(StraightEdge {
+                        starting_point: (0.0, starting_points_y[index_y]),
+                        end_point: (
+                            0.0,
+                            end_point_pos(index_y, &starting_points_y, image_height),
+                        ),
+                    })
+                } else {
+                    Edge::StraightEdge(StraightEdge {
+                        starting_point: (starting_points_x[index_x], starting_points_y[index_y]),
+                        end_point: (
+                            starting_points_x[index_x],
+                            end_point_pos(index_y, &starting_points_y, image_height),
+                        ),
+                    })
+                });
+
+                left_border = false;
+            }
+
+            top_border = false;
+
+            // Draw right outer edge
+            vertical_edges.push(Edge::StraightEdge(StraightEdge {
+                starting_point: (image_width, starting_points_y[index_y]),
+                end_point: (
+                    image_width,
+                    end_point_pos(index_y, &starting_points_y, image_height),
+                ),
+            }));
+        }
+
+        // Draw bottom outer edges
+        for index_x in 0..starting_points_x.len() {
+            horizontal_edges.push(Edge::StraightEdge(StraightEdge {
+                starting_point: (starting_points_x[index_x], image_height),
+                end_point: (
+                    end_point_pos(index_x, &starting_points_x, image_width),
+                    image_height,
+                ),
+            }))
+        }
+
+        (vertical_edges, horizontal_edges)
+    }
+
+    fn classic_generator(
+        &self,
+        image_width: f32,
+        image_height: f32,
+        starting_points_x: &Vec<f32>,
+        piece_width: f32,
+        starting_points_y: &Vec<f32>,
+        piece_height: f32,
+    ) -> (Vec<Edge>, Vec<Edge>) {
         let mut contour_gen = EdgeContourGenerator::new(
             piece_width,
             piece_height,
@@ -723,41 +863,7 @@ impl JigsawGenerator {
                 ),
             }))
         }
-
-        let mut pieces = vec![];
-        let mut i = 0;
-        for y in starting_points_y.iter() {
-            for x in starting_points_x.iter() {
-                debug!("starting process piece {i}");
-                let (top_index, right_index, bottom_index, left_index) =
-                    get_border_indices(i, pieces_in_column);
-                let piece = JigsawPiece::new(
-                    i,
-                    (*x, *y),
-                    target_image.dimensions(),
-                    (piece_width, piece_height),
-                    horizontal_edges[top_index].clone(),
-                    vertical_edges[right_index].clone(),
-                    horizontal_edges[bottom_index].clone(),
-                    vertical_edges[left_index].clone(),
-                )?;
-
-                debug!("calc beziers end {}", i);
-
-                // draw debug line
-                // piece.draw_debug_line(&mut scaled_image);
-
-                pieces.push(piece);
-                i += 1;
-            }
-        }
-
-        Ok(JigsawTemplate {
-            pieces,
-            origin_image: target_image,
-            piece_dimensions: (piece_width, piece_height),
-            number_of_pieces: (pieces_in_column, pieces_in_row),
-        })
+        (vertical_edges, horizontal_edges)
     }
 }
 
@@ -847,14 +953,10 @@ impl JigsawPiece {
 
         let (image_width, image_height) = (origin_image_size.0, origin_image_size.1);
         let (piece_width, piece_height) = (piece_size.0, piece_size.1);
-        let piece_width_offset = piece_width * 0.01;
-        let piece_height_offset = piece_height * 0.01;
-        let top_left_x = (box_min.x as f32 - piece_width_offset).max(0.0) as u32;
-        let top_left_y = (box_min.y as f32 - piece_height_offset).max(0.0) as u32;
-        let mut crop_width = (box_max.x as f32 - box_min.x as f32 + 2.0 * piece_width_offset)
-            .max(piece_width) as u32;
-        let mut crop_height = (box_max.y as f32 - box_min.y as f32 + 2.0 * piece_height_offset)
-            .max(piece_height) as u32;
+        let top_left_x = (box_min.x as f32).max(0.0) as u32;
+        let top_left_y = (box_min.y as f32).max(0.0) as u32;
+        let mut crop_width = (box_max.x as f32 - box_min.x as f32).max(piece_width) as u32;
+        let mut crop_height = (box_max.y as f32 - box_min.y as f32).max(piece_height) as u32;
         if top_left_x + crop_width > image_width {
             crop_width = image_width - top_left_x;
         }

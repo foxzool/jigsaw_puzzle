@@ -9,11 +9,14 @@ fn main() {
     }
     let env = Env::default();
     Builder::from_env(env).format_timestamp_millis().init();
-    let image_path = env::args().nth(1).unwrap_or("raw.jpg".to_string());
-    let template = JigsawGenerator::from_path(&image_path, 9, 6)
+    let image_path = env::args()
+        .nth(1)
+        .unwrap_or("assets/images/raw.jpg".to_string());
+    let template = JigsawGenerator::from_path(&image_path, 4, 5)
         .expect("Failed to load image")
-        .generate(GameMode::Classic, false)
+        .generate(GameMode::Square, false)
         .expect("Failed to generate puzzle");
+
     create_dir_all("images").expect("Failed to create images directory");
     template
         .origin_image

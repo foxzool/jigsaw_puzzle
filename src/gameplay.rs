@@ -12,7 +12,7 @@ use bevy::utils::HashSet;
 use bevy::window::WindowMode;
 use flume::{bounded, Receiver};
 use jigsaw_puzzle_generator::image::GenericImageView;
-use jigsaw_puzzle_generator::{GameMode, JigsawGenerator, JigsawPiece, JigsawTemplate};
+use jigsaw_puzzle_generator::{JigsawGenerator, JigsawPiece, JigsawTemplate};
 use log::debug;
 use rand::Rng;
 use std::ops::DerefMut;
@@ -119,11 +119,7 @@ fn setup_finish_ui(
 
             p.spawn((Text::new("Finish"), TextColor(Color::BLACK), text_font));
             p.spawn((
-                Text::new(format!(
-                    "{} pieces {}",
-                    select_piece.to_string(),
-                    select_game_mode.to_string()
-                )),
+                Text::new(format!("{} pieces {}", *select_piece, *select_game_mode)),
                 TextColor(Color::BLACK),
                 Node {
                     margin: UiRect::all(Val::Px(5.0)),
@@ -252,7 +248,6 @@ fn setup_generator(
     mut commands: Commands,
     images: Res<Assets<Image>>,
     origin_image: Res<OriginImage>,
-    select_game_mode: Res<SelectGameMode>,
     select_piece: Res<SelectPiece>,
 ) {
     let image = images.get(&origin_image.0).unwrap();
@@ -301,10 +296,14 @@ struct WhiteImage;
 struct ColorImage;
 
 /// Spawn the pieces of the jigsaw puzzle
-fn spawn_piece(mut commands: Commands, generator: Res<JigsawPuzzleGenerator>) {
+fn spawn_piece(
+    mut commands: Commands,
+    generator: Res<JigsawPuzzleGenerator>,
+    select_game_mode: Res<SelectGameMode>,
+) {
     debug!("Start to generate pieces");
     let start = std::time::Instant::now();
-    if let Ok(template) = generator.generate(GameMode::Classic, false) {
+    if let Ok(template) = generator.generate(**select_game_mode, false) {
         // commands.insert_resource(JigsawPuzzleTemplate(template.clone()));
         let mut wait_crops = vec![];
         let (tx, rx) = bounded(template.pieces.len());
