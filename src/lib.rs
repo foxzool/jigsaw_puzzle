@@ -1,3 +1,4 @@
+use bevy::asset::AssetMetaCheck;
 use bevy::prelude::*;
 use bevy::render::view::RenderLayers;
 use core::fmt::Formatter;
@@ -12,6 +13,13 @@ impl Plugin for PuzzlePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(
             DefaultPlugins
+                .set(AssetPlugin {
+                    // Wasm builds will check for meta files (that don't exist) if this isn't set.
+                    // This causes errors and even panics on web build on itch.
+                    // See https://github.com/bevyengine/bevy_github_ci_template/issues/48.
+                    meta_check: AssetMetaCheck::Never,
+                    ..default()
+                })
                 .set(ImagePlugin::default_nearest())
                 .set(WindowPlugin {
                     primary_window: Some(Window {

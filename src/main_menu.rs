@@ -160,6 +160,8 @@ fn setup_menu(
     select_piece: Res<SelectPiece>,
     select_mode: Res<SelectGameMode>,
 ) {
+    let image = asset_server.load("images/raw.jpg");
+    commands.insert_resource(OriginImage(image));
     let text_font = asset_server.load("fonts/FiraSans-Bold.ttf");
     // let title_font = asset_server.load("fonts/MinecraftEvenings.ttf");
     let down_arrow = asset_server.load("icons/down-arrow.png");

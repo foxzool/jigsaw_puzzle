@@ -7,12 +7,11 @@ use bevy::ecs::world::CommandQueue;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
+use bevy::tasks::{block_on, futures_lite::future, AsyncComputeTaskPool, Task};
 use bevy::time::Stopwatch;
 use bevy::utils::HashSet;
 use bevy::window::WindowMode;
 use core::ops::DerefMut;
-use core::time::Duration;
-use flume::{bounded, Receiver};
 use jigsaw_puzzle_generator::image::GenericImageView;
 use jigsaw_puzzle_generator::{JigsawGenerator, JigsawPiece, JigsawTemplate};
 use log::debug;
@@ -199,23 +198,11 @@ fn setup_finish_ui(
         });
 }
 
-fn setup_game(
-    origin_image: Option<Res<OriginImage>>,
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut game_state: ResMut<NextState<GameState>>,
-) {
-    if origin_image.is_none() {
-        debug!("Load default image");
-        let image = asset_server.load("images/raw.jpg");
-        commands.insert_resource(OriginImage(image));
-    } else {
-        game_state.set(GameState::Generating);
-    }
+fn setup_game(mut game_state: ResMut<NextState<GameState>>) {
+    game_state.set(GameState::Generating);
 }
 
 fn change_to_generate(mut game_state: ResMut<NextState<GameState>>) {
-    std::thread::sleep(Duration::from_secs(1));
     game_state.set(GameState::Generating);
 }
 
@@ -283,7 +270,7 @@ pub struct JigsawPuzzleGenerator(pub JigsawGenerator);
 pub struct JigsawPuzzleTemplate(pub JigsawTemplate);
 
 #[derive(Component)]
-struct CropTask(Receiver<CommandQueue>);
+struct CropTask(Task<CommandQueue>);
 
 #[derive(Component)]
 struct WhiteImage;
@@ -298,11 +285,9 @@ fn spawn_piece(
     select_game_mode: Res<SelectGameMode>,
 ) {
     debug!("Start to generate pieces");
-    let start = std::time::Instant::now();
     if let Ok(template) = generator.generate(**select_game_mode, false) {
         // commands.insert_resource(JigsawPuzzleTemplate(template.clone()));
         let mut wait_crops = vec![];
-        let (tx, rx) = bounded(template.pieces.len());
         for piece in template.pieces.iter() {
             let piece_clone = piece.clone();
 
@@ -327,14 +312,16 @@ fn spawn_piece(
                 .id();
 
             wait_crops.push((entity, piece_clone));
-            commands.entity(entity).insert(CropTask(rx.clone()));
         }
 
         if !wait_crops.is_empty() {
-            let template_clone = template.clone();
-            std::thread::spawn(move || {
-                for (entity, piece) in wait_crops {
+            let thread_pool = AsyncComputeTaskPool::get();
+            for (entity, piece) in wait_crops {
+                let template_clone = template.clone();
+                let task = thread_pool.spawn(async move {
                     let mut command_queue = CommandQueue::default();
+
+                    println!("Start to crop piece {}", piece.index);
                     let cropped_image = piece.crop(&template_clone.origin_image);
                     let white_image = piece.fill_white(&cropped_image);
                     command_queue.push(move |mut world: &mut World| {
@@ -397,12 +384,11 @@ fn spawn_piece(
                             .remove::<CropTask>();
                     });
 
-                    tx.send(command_queue).unwrap();
-                }
-            });
+                    command_queue
+                });
+                commands.entity(entity).insert(CropTask(task));
+            }
         }
-
-        debug!("Time to generate pieces: {:?}", start.elapsed());
         commands.send_event(Shuffle::Random);
     };
 }
@@ -429,10 +415,11 @@ fn init_position(piece: &JigsawPiece, origin_image_size: (u32, u32)) -> Vec2 {
     )
 }
 
-fn handle_tasks(mut commands: Commands, mut crop_tasks: Query<&CropTask>) {
-    for task in crop_tasks.iter_mut() {
-        for mut queue in task.0.try_iter() {
-            commands.append(&mut queue);
+fn handle_tasks(mut commands: Commands, mut crop_tasks: Query<&mut CropTask>) {
+    for mut task in crop_tasks.iter_mut() {
+        if let Some(mut commands_queue) = block_on(future::poll_once(&mut task.0)) {
+            // append the returned command queue to have it execute later
+            commands.append(&mut commands_queue);
         }
     }
 }
