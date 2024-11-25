@@ -14,7 +14,7 @@ use image::{DynamicImage, GenericImageView, Rgba, RgbaImage};
 
 use log::{debug, info, trace};
 use rayon::iter::ParallelIterator;
-use std::vec;
+use std::{sync::Arc, vec};
 
 pub use image;
 pub use imageproc;
@@ -539,7 +539,7 @@ pub fn generate_columns_rows_numbers(
 #[derive(Debug, Clone)]
 pub struct JigsawGenerator {
     /// The original image from which the jigsaw puzzle pieces will be generated.
-    origin_image: DynamicImage,
+    origin_image: Arc<DynamicImage>,
     /// The number of pieces in a column.
     pieces_in_column: usize,
     /// The number of pieces in a row.
@@ -555,7 +555,7 @@ pub struct JigsawGenerator {
 impl JigsawGenerator {
     pub fn new(origin_image: DynamicImage, pieces_in_column: usize, pieces_in_row: usize) -> Self {
         JigsawGenerator {
-            origin_image,
+            origin_image: Arc::new(origin_image),
             pieces_in_column,
             pieces_in_row,
             tab_size: None,
@@ -597,7 +597,7 @@ impl JigsawGenerator {
             origin_image.height()
         );
         Ok(JigsawGenerator {
-            origin_image,
+            origin_image: Arc::new(origin_image),
             pieces_in_column,
             pieces_in_row,
             tab_size: None,
@@ -639,7 +639,7 @@ impl JigsawGenerator {
 
     pub fn generate(&self, game_mode: GameMode, resize: bool) -> Result<JigsawTemplate> {
         let target_image = if resize {
-            scale_image(&self.origin_image)
+            Arc::new(scale_image(&self.origin_image))
         } else {
             self.origin_image.clone()
         };
@@ -875,7 +875,7 @@ pub struct JigsawTemplate {
     /// The generated jigsaw puzzle pieces
     pub pieces: Vec<JigsawPiece>,
     /// The original image from which the jigsaw puzzle pieces will be generated.
-    pub origin_image: DynamicImage,
+    pub origin_image: Arc<DynamicImage>,
     /// The dimensions (width, length) in pixel
     pub piece_dimensions: (f32, f32),
     /// The number of pieces in the x- and the y-axis
@@ -1266,8 +1266,8 @@ mod tests {
         let image_height: f32 = 768.;
         let possible_aspect_ratios = vec![(1, 25), (5, 5), (25, 1)];
         assert_eq!(
-            optimal_aspect_ratio(possible_aspect_ratios, image_width, image_height),
-            Ok((5, 5))
+            optimal_aspect_ratio(possible_aspect_ratios, image_width, image_height).ok(),
+            Some((5, 5))
         );
 
         let image_width: f32 = 666.;
@@ -1283,8 +1283,8 @@ mod tests {
             (24, 1),
         ];
         assert_eq!(
-            optimal_aspect_ratio(possible_aspect_ratios, image_width, image_height),
-            Ok((6, 4))
+            optimal_aspect_ratio(possible_aspect_ratios, image_width, image_height).ok(),
+            Some((6, 4))
         );
     }
 }
