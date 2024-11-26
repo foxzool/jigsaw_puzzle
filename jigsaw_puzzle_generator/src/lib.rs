@@ -1,7 +1,7 @@
 //! The Jigsaw Puzzle library creates SVG paths which can be used to cut out puzzle pieces from a
 //! given rectangular image. It provides three public functions:
 //!
-//! - [`build_jigsaw_pieces`] returns the paths from a given number of pieces in a column and a
+//! - [`generate`] returns the paths from a given number of pieces in a column and a
 //!     row. This is the function you normally want to use
 //! - [`generate_columns_rows_numbers`] returns an ideal distribution of pieces on the x- and y-axes
 //!     for a given total number of pieces

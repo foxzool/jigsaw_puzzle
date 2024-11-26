@@ -321,7 +321,7 @@ fn spawn_piece(
                 let task = thread_pool.spawn(async move {
                     let mut command_queue = CommandQueue::default();
 
-                    println!("Start to crop piece {}", piece.index);
+                    debug!("Start to crop piece {}", piece.index);
                     let cropped_image = piece.crop(&template_clone.origin_image);
                     let white_image = piece.fill_white(&cropped_image);
                     command_queue.push(move |mut world: &mut World| {
