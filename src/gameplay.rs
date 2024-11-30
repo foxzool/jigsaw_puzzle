@@ -960,7 +960,7 @@ fn setup_game_ui(
                         // exit button
                         builder
                             .spawn((
-                                UiImage::new(asset_server.load("icons/cross.png")),
+                                ImageNode::new(asset_server.load("icons/cross.png")),
                                 Node {
                                     height: Val::Px(40.),
                                     ..default()
@@ -975,7 +975,7 @@ fn setup_game_ui(
                         // shuffle button
                         builder
                             .spawn((
-                                UiImage::new(asset_server.load("icons/four-arrows.png")),
+                                ImageNode::new(asset_server.load("icons/four-arrows.png")),
                                 Node {
                                     height: Val::Px(40.),
                                     ..default()
@@ -997,7 +997,7 @@ fn setup_game_ui(
                             })
                             .with_children(|builder| {
                                 builder.spawn((
-                                    UiImage::new(asset_server.load("icons/zoom_out.png")),
+                                    ImageNode::new(asset_server.load("icons/zoom_out.png")),
                                     Node {
                                         height: Val::Px(30.),
                                         margin: UiRect {
@@ -1016,7 +1016,7 @@ fn setup_game_ui(
 
                                 // zoom in button
                                 builder.spawn((
-                                    UiImage::new(asset_server.load("icons/zoom_in.png")),
+                                    ImageNode::new(asset_server.load("icons/zoom_in.png")),
                                     Node {
                                         height: Val::Px(30.),
                                         margin: UiRect {
@@ -1039,7 +1039,7 @@ fn setup_game_ui(
                 builder.spawn(Node::default()).with_children(|p| {
                     // idea
                     p.spawn((
-                        UiImage::new(asset_server.load("icons/lamp.png")),
+                        ImageNode::new(asset_server.load("icons/lamp.png")),
                         Node {
                             height: Val::Px(40.),
                             margin: UiRect::axes(Val::Px(0.), Val::Px(5.)),
@@ -1063,7 +1063,7 @@ fn setup_game_ui(
                     ),))
                         .with_children(|p| {
                             p.spawn((
-                                UiImage {
+                                ImageNode {
                                     image: asset_server.load("icons/puzzle_s.png"),
                                     flip_x: true,
                                     ..default()
@@ -1076,7 +1076,7 @@ fn setup_game_ui(
                             ));
 
                             p.spawn((
-                                UiImage::new(asset_server.load("icons/puzzle_e.png")),
+                                ImageNode::new(asset_server.load("icons/puzzle_e.png")),
                                 Node {
                                     height: Val::Px(30.),
                                     margin: UiRect {
@@ -1092,7 +1092,7 @@ fn setup_game_ui(
                             ));
 
                             p.spawn((
-                                UiImage::new(asset_server.load("icons/puzzle_s.png")),
+                                ImageNode::new(asset_server.load("icons/puzzle_s.png")),
                                 Node {
                                     height: Val::Px(40.),
                                     margin: UiRect::axes(Val::Px(2.), Val::Px(5.)),
@@ -1108,7 +1108,7 @@ fn setup_game_ui(
 
                     // background hint
                     p.spawn((
-                        UiImage::new(asset_server.load("icons/ghost.png")),
+                        ImageNode::new(asset_server.load("icons/ghost.png")),
                         Node {
                             height: Val::Px(40.),
                             margin: UiRect::axes(Val::Px(0.), Val::Px(5.)),
@@ -1163,7 +1163,7 @@ fn setup_game_ui(
                             position_type: PositionType::Absolute,
                             ..default()
                         },
-                        UiImage::new(asset_server.load("icons/photo.png")),
+                        ImageNode::new(asset_server.load("icons/photo.png")),
                         HintImageButton,
                         Visibility::Visible,
                     ))
@@ -1188,7 +1188,7 @@ fn setup_game_ui(
 
                 // pause button
                 p.spawn((
-                    UiImage::new(asset_server.load("icons/pause.png")),
+                    ImageNode::new(asset_server.load("icons/pause.png")),
                     Node {
                         height: Val::Px(40.),
                         margin: UiRect {
@@ -1207,7 +1207,7 @@ fn setup_game_ui(
                 );
                 // fullscreen button
                 p.spawn((
-                    UiImage::new(asset_server.load("icons/fullscreen.png")),
+                    ImageNode::new(asset_server.load("icons/fullscreen.png")),
                     Node {
                         height: Val::Px(40.),
                         ..default()
@@ -1424,7 +1424,7 @@ fn hint_image_click(
     commands
         .entity(*small_hint_image)
         .insert((
-            UiImage::new(origin_image.0.clone()),
+            ImageNode::new(origin_image.0.clone()),
             Node {
                 width: Val::Px(400.0),
                 // aspect_ratio: Some(aspect_ratio),
@@ -1444,5 +1444,5 @@ fn hint_small_image_click(
     small_img: Single<Entity, (With<SmallHintImage>, Without<HintImageButton>)>,
 ) {
     **hint = Visibility::Visible;
-    commands.entity(*small_img).remove::<UiImage>();
+    commands.entity(*small_img).remove::<ImageNode>();
 }

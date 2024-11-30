@@ -2,10 +2,14 @@ use crate::{
     despawn_screen, AnimeCamera, AppState, OriginImage, SelectGameMode, SelectPiece,
     ANIMATION_LAYERS, HOVERED_BUTTON, NORMAL_BUTTON, PRESSED_BUTTON,
 };
-use bevy::animation::{AnimationTarget, AnimationTargetId};
+use bevy::animation::{
+    animated_field, AnimationEntityMut, AnimationEvaluationError, AnimationTarget,
+    AnimationTargetId,
+};
 use bevy::color::palettes::basic::BLACK;
 use bevy::prelude::*;
 use bevy::window::WindowResized;
+use core::any::TypeId;
 
 pub(crate) fn menu_plugin(app: &mut App) {
     app.init_resource::<LoadedImages>()
@@ -48,18 +52,33 @@ struct MenuTimer(Timer);
 #[derive(Event)]
 struct ShowTitleAnime;
 
-#[derive(Reflect)]
+#[derive(Reflect, Clone)]
 struct TextColorProperty;
 
 impl AnimatableProperty for TextColorProperty {
-    type Component = TextColor;
-
     type Property = Srgba;
 
-    fn get_mut(component: &mut Self::Component) -> Option<&mut Self::Property> {
-        match component.0 {
-            Color::Srgba(ref mut color) => Some(color),
-            _ => None,
+    fn evaluator_id(&self) -> EvaluatorId {
+        EvaluatorId::Type(TypeId::of::<Self>())
+    }
+
+    fn get_mut<'a>(
+        &self,
+        entity: &'a mut AnimationEntityMut,
+    ) -> Result<&'a mut Self::Property, AnimationEvaluationError> {
+        let text_color = entity
+            .get_mut::<TextColor>()
+            .ok_or(AnimationEvaluationError::ComponentNotPresent(TypeId::of::<
+                TextColor,
+            >(
+            )))?
+            .into_inner();
+        match text_color.0 {
+            Color::Srgba(ref mut color) => Ok(color),
+            _ => Err(AnimationEvaluationError::PropertyNotPresent(TypeId::of::<
+                Srgba,
+            >(
+            ))),
         }
     }
 }
@@ -102,26 +121,30 @@ fn show_title(
     let title_animation_target_id = AnimationTargetId::from_name(&title);
     animation.add_curve_to_target(
         title_animation_target_id,
-        UnevenSampleAutoCurve::new([0.0, 0.5, 1.0, 2.0, 3.0].into_iter().zip([
-            Vec3::new(start_pos.0, start_pos.1, 0.0),
-            Vec3::new(start_pos.0, start_pos.1 + 50.0, 0.0),
-            Vec3::new(start_pos.0, start_pos.1 + 110.0, 0.0),
-            Vec3::new(start_pos.0, start_pos.1 + 180.0, 0.0),
-        ]))
-        .map(TranslationCurve)
-        .expect("should be able to build translation curve because we pass in valid samples"),
+        AnimatableCurve::new(
+            animated_field!(Transform::translation),
+            UnevenSampleAutoCurve::new([0.0, 0.5, 1.0, 2.0, 3.0].into_iter().zip([
+                Vec3::new(start_pos.0, start_pos.1, 0.0),
+                Vec3::new(start_pos.0, start_pos.1 + 50.0, 0.0),
+                Vec3::new(start_pos.0, start_pos.1 + 110.0, 0.0),
+                Vec3::new(start_pos.0, start_pos.1 + 180.0, 0.0),
+            ]))
+            .expect("should be able to build translation curve because we pass in valid samples"),
+        ),
     );
 
     animation.add_curve_to_target(
         title_animation_target_id,
-        AnimatableKeyframeCurve::new([0.0, 1.0, 2.0, 3.0].into_iter().zip([
-            Srgba::new(0.0, 0.0, 0.0, 0.1),
-            Srgba::new(0.0, 0.0, 0.0, 0.3),
-            Srgba::new(0.0, 0.0, 0.0, 0.6),
-            Srgba::new(0.0, 0.0, 0.0, 1.0),
-        ]))
-        .map(AnimatableCurve::<TextColorProperty, _>::from_curve)
-        .expect("should be able to build translation curve because we pass in valid samples"),
+        AnimatableCurve::new(
+            TextColorProperty,
+            AnimatableKeyframeCurve::new([0.0, 1.0, 2.0, 3.0].into_iter().zip([
+                Srgba::new(0.0, 0.0, 0.0, 0.1),
+                Srgba::new(0.0, 0.0, 0.0, 0.3),
+                Srgba::new(0.0, 0.0, 0.0, 0.6),
+                Srgba::new(0.0, 0.0, 0.0, 1.0),
+            ]))
+            .expect("should be able to build translation curve because we pass in valid samples"),
+        ),
     );
 
     // Create the animation graph
@@ -177,7 +200,7 @@ fn setup_menu(
                 justify_content: JustifyContent::SpaceBetween,
                 ..default()
             },
-            UiImage::new(asset_server.load("images/puzzle.jpg")),
+            ImageNode::new(asset_server.load("images/puzzle.jpg")),
             OnMenuScreen,
         ))
         .id();
@@ -245,7 +268,7 @@ fn setup_menu(
                     .with_children(|p| {
                         // up arrow
                         p.spawn((
-                            UiImage {
+                            ImageNode {
                                 image: down_arrow.clone(),
                                 flip_y: true,
                                 ..default()
@@ -278,7 +301,7 @@ fn setup_menu(
                         ));
                         // down arrow
                         p.spawn((
-                            UiImage::new(down_arrow.clone()),
+                            ImageNode::new(down_arrow.clone()),
                             Node {
                                 width: Val::Px(30.0),
                                 height: Val::Px(30.0),
@@ -320,7 +343,7 @@ fn setup_menu(
                     .with_children(|p| {
                         // up arrow
                         p.spawn((
-                            UiImage {
+                            ImageNode {
                                 image: down_arrow.clone(),
                                 flip_y: true,
                                 ..default()
@@ -353,7 +376,7 @@ fn setup_menu(
                         ));
                         // down arrow
                         p.spawn((
-                            UiImage::new(down_arrow.clone()),
+                            ImageNode::new(down_arrow.clone()),
                             Node {
                                 width: Val::Px(30.0),
                                 height: Val::Px(30.0),
@@ -557,7 +580,7 @@ fn show_origin_image(
 ) {
     commands
         .entity(*container)
-        .insert(UiImage::new(origin_image.0.clone()));
+        .insert(ImageNode::new(origin_image.0.clone()));
 }
 
 fn show_images(
@@ -568,7 +591,7 @@ fn show_images(
     for image in loaded_images.0.iter() {
         let child_node = commands
             .spawn((
-                UiImage::new(image.clone()),
+                ImageNode::new(image.clone()),
                 Node {
                     margin: UiRect::axes(Val::Px(10.0), Val::Px(0.0)),
                     ..default()
@@ -583,7 +606,7 @@ fn show_images(
                 |trigger: Trigger<Pointer<Click>>,
                  mut origin_image: ResMut<OriginImage>,
                  dragging: Res<Dragging>,
-                 image_query: Query<&UiImage>| {
+                 image_query: Query<&ImageNode>| {
                     if dragging.0 {
                         return;
                     }
