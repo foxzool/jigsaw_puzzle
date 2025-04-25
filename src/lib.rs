@@ -70,8 +70,8 @@ const NORMAL_BUTTON: Color = Color::srgb(0.15, 0.15, 0.15);
 const HOVERED_BUTTON: Color = Color::srgb(0.25, 0.25, 0.25);
 const PRESSED_BUTTON: Color = Color::srgb(0.35, 0.75, 0.35);
 
-#[derive(Resource, Deref)]
-pub struct AnimeCamera(pub Entity);
+#[derive(Component)]
+pub struct AnimeCamera;
 
 pub const ANIMATION_LAYERS: RenderLayers = RenderLayers::layer(1);
 
@@ -84,23 +84,21 @@ pub struct Piece(pub JigsawPiece);
 // Generic system that takes a component as a parameter, and will despawn all entities with that component
 fn despawn_screen<T: Component>(to_despawn: Query<Entity, With<T>>, mut commands: Commands) {
     for entity in &to_despawn {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }
 
 fn setup_camera(mut commands: Commands) {
     commands.spawn((Camera2d, IsDefaultUiCamera));
-    let anime_camera = commands
-        .spawn((
-            Camera2d,
-            Camera {
-                order: 1,
-                ..default()
-            },
-            ANIMATION_LAYERS,
-        ))
-        .id();
-    commands.insert_resource(AnimeCamera(anime_camera));
+    commands.spawn((
+        Camera2d,
+        Camera {
+            order: 1,
+            ..default()
+        },
+        ANIMATION_LAYERS,
+        AnimeCamera,
+    ));
 }
 
 #[derive(Resource, Default, Clone, Copy, Debug)]

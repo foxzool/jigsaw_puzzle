@@ -1,10 +1,10 @@
 use crate::{
-    despawn_screen, AnimeCamera, AppState, OriginImage, SelectGameMode, SelectPiece,
-    ANIMATION_LAYERS, HOVERED_BUTTON, NORMAL_BUTTON, PRESSED_BUTTON,
+    ANIMATION_LAYERS, AnimeCamera, AppState, HOVERED_BUTTON, NORMAL_BUTTON, OriginImage,
+    PRESSED_BUTTON, SelectGameMode, SelectPiece, despawn_screen,
 };
 use bevy::animation::{
-    animated_field, AnimationEntityMut, AnimationEvaluationError, AnimationTarget,
-    AnimationTargetId,
+    AnimationEntityMut, AnimationEvaluationError, AnimationTarget, AnimationTargetId,
+    animated_field,
 };
 use bevy::color::palettes::basic::BLACK;
 use bevy::prelude::*;
@@ -94,11 +94,11 @@ fn show_title(
     mut animations: ResMut<Assets<AnimationClip>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
     window: Single<&Window>,
-    anime_camera: Res<AnimeCamera>,
+    anime_camera: Single<Entity, With<AnimeCamera>>,
     old_title: Query<Entity, With<AnimationTarget>>,
 ) {
     for entity in old_title.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 
     let font = asset_server.load("fonts/MinecraftEvenings.ttf");
@@ -161,7 +161,7 @@ fn show_title(
             TextLayout::new_with_justify(text_justification),
             TextColor(BLACK.into()),
             ANIMATION_LAYERS,
-            TargetCamera(**anime_camera),
+            UiTargetCamera(*anime_camera),
             Transform::from_xyz(start_pos.0, start_pos.1, 1.0),
             // Transform::from_xyz(0.0, 0.0, 0.0),
             title,
@@ -215,7 +215,7 @@ fn setup_menu(
                 ..default()
             },
             // BackgroundColor(Color::srgba(0.5, 0.0, 0.0, 0.5)),
-            PickingBehavior::IGNORE,
+            Pickable::IGNORE,
             Visibility::Hidden,
             HiddenItem,
         ))
@@ -438,7 +438,7 @@ fn setup_menu(
                 height: Val::Percent(100.0),
                 ..default()
             },
-            PickingBehavior::IGNORE,
+            Pickable::IGNORE,
             // BackgroundColor(Color::srgba(0.5, 0.1, 0.0, 0.5)),
         ))
         .with_children(|p| {
@@ -610,7 +610,7 @@ fn show_images(
                     if dragging.0 {
                         return;
                     }
-                    let image = image_query.get(trigger.entity()).unwrap();
+                    let image = image_query.get(trigger.target()).unwrap();
                     origin_image.0 = image.image.clone();
                 },
             )

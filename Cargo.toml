@@ -1,7 +1,7 @@
 [package]
 name = "jigsaw_puzzle"
-version = "0.1.0"
-edition = "2021"
+version = "0.2.0"
+edition = "2024"
 
 [workspace]
 resolver = "2"
@@ -36,7 +36,7 @@ alloc_instead_of_core = "warn"
 
 
 [dependencies]
-bevy = { version = "0.15.0", features = ["bevy_sprite_picking_backend", "jpeg"] }
+bevy = { version = "0.16.0", features = ["jpeg"] }
 #bevy = { git = "https://github.com/bevyengine/bevy", features = ["bevy_sprite_picking_backend"] }
 jigsaw_puzzle_generator = { path = "jigsaw_puzzle_generator" }
 rand = "0.8.5"

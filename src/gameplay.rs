@@ -1,15 +1,15 @@
 use crate::NORMAL_BUTTON;
-use crate::{despawn_screen, GameState};
 use crate::{AppState, OriginImage, Piece, SelectGameMode, SelectPiece};
+use crate::{GameState, despawn_screen};
 use bevy::asset::RenderAssetUsages;
 use bevy::color::palettes::basic::{GREEN, YELLOW};
 use bevy::ecs::world::CommandQueue;
 use bevy::input::mouse::MouseWheel;
+use bevy::platform::collections::HashSet;
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
-use bevy::tasks::{block_on, futures_lite::future, AsyncComputeTaskPool, Task};
+use bevy::tasks::{AsyncComputeTaskPool, Task, block_on, futures_lite::future};
 use bevy::time::Stopwatch;
-use bevy::utils::HashSet;
 use bevy::window::WindowMode;
 use core::ops::DerefMut;
 use jigsaw_puzzle_generator::image::GenericImageView;
@@ -237,8 +237,9 @@ fn setup_generator(
     let (columns, rows) = select_piece.get_columns_rows();
     let width = image.texture_descriptor.size.width;
     let height = image.texture_descriptor.size.height;
-    let generator = JigsawGenerator::from_rgba8(width, height, &image.data, columns, rows)
-        .expect("Failed to load image");
+    let generator =
+        JigsawGenerator::from_rgba8(width, height, &image.data.clone().unwrap(), columns, rows)
+            .expect("Failed to load image");
 
     commands
         .spawn((
@@ -348,6 +349,7 @@ fn spawn_piece(
 
                         let color_id = world
                             .spawn((
+                                Pickable::default(),
                                 ColorImage,
                                 color_sprite,
                                 Transform::from_xyz(
@@ -449,14 +451,14 @@ fn on_drag_start(
     camera: Single<(&Camera, &GlobalTransform), (With<Camera2d>, With<IsDefaultUiCamera>)>,
     mut commands: Commands,
 ) {
-    if let Ok(mut transform) = piece.get_mut(trigger.entity()) {
+    if let Ok(mut transform) = piece.get_mut(trigger.target()) {
         let click_position = trigger.event().pointer_location.position;
         let (camera, camera_global_transform) = camera.into_inner();
         let point = camera
             .viewport_to_world_2d(camera_global_transform, click_position)
             .unwrap();
         transform.translation.z = 100.0;
-        commands.entity(trigger.entity()).insert(MoveStart {
+        commands.entity(trigger.target()).insert(MoveStart {
             image_position: *transform,
             click_position: point,
         });
@@ -468,10 +470,10 @@ fn on_drag_end(
     mut image: Query<&mut Transform, (With<MoveStart>, With<Piece>)>,
     mut commands: Commands,
 ) {
-    if let Ok(mut transform) = image.get_mut(trigger.entity()) {
+    if let Ok(mut transform) = image.get_mut(trigger.target()) {
         transform.translation.z = 0.0;
-        commands.entity(trigger.entity()).remove::<MoveStart>();
-        commands.trigger_targets(MoveEnd, vec![trigger.entity()]);
+        commands.entity(trigger.target()).remove::<MoveStart>();
+        commands.trigger_targets(MoveEnd, vec![trigger.target()]);
     }
 }
 
@@ -481,7 +483,7 @@ fn on_click_piece(
     camera: Single<(&Camera, &GlobalTransform), (With<Camera2d>, With<IsDefaultUiCamera>)>,
     mut commands: Commands,
 ) {
-    if let Ok((mut transform, opt_moveable)) = image.get_mut(trigger.entity()) {
+    if let Ok((mut transform, opt_moveable)) = image.get_mut(trigger.target()) {
         let click_position = trigger.event().pointer_location.position;
         let (camera, camera_global_transform) = camera.into_inner();
         let point = camera
@@ -490,11 +492,11 @@ fn on_click_piece(
 
         if opt_moveable.is_some() {
             transform.translation.z = 0.0;
-            commands.entity(trigger.entity()).remove::<MoveStart>();
-            commands.trigger_targets(MoveEnd, vec![trigger.entity()]);
+            commands.entity(trigger.target()).remove::<MoveStart>();
+            commands.trigger_targets(MoveEnd, vec![trigger.target()]);
         } else {
             transform.translation.z = 100.0;
-            commands.entity(trigger.entity()).insert(MoveStart {
+            commands.entity(trigger.target()).insert(MoveStart {
                 image_position: *transform,
                 click_position: point,
             });
@@ -543,12 +545,16 @@ fn on_move_end(
     mut next_state: ResMut<NextState<GameState>>,
 ) {
     let mut iter = query.iter_combinations_mut();
-    let end_entity = trigger.entity();
+    let end_entity = trigger.target();
 
     let mut all_entities = HashSet::default();
     let mut max_z = 0f32;
-    while let Some([(e1, p1, transform1, together1), (e2, p2, transform2, together2)]) =
-        iter.fetch_next()
+    while let Some(
+        [
+            (e1, p1, transform1, together1),
+            (e2, p2, transform2, together2),
+        ],
+    ) = iter.fetch_next()
     {
         let (mut target_transform, compare_transform, target, compare) = if e1 == end_entity {
             (transform1, transform2, p1, p2)
@@ -621,7 +627,7 @@ fn on_move_end(
         next_state.set(GameState::Finish);
     }
 
-    if let Ok((_e, _p, mut transform, _together)) = query.get_mut(trigger.entity()) {
+    if let Ok((_e, _p, mut transform, _together)) = query.get_mut(trigger.target()) {
         transform.translation.z = max_z + 1.0;
     }
 
@@ -660,14 +666,14 @@ fn on_selected(
     mut q_image: Query<&mut Transform, (With<ColorImage>, Without<WhiteImage>)>,
     mut w_image: Query<&mut Sprite, (With<WhiteImage>, Without<ColorImage>)>,
 ) {
-    let children = query.get(trigger.entity()).unwrap();
+    let children = query.get(trigger.target()).unwrap();
 
     for child in children.iter() {
-        if let Ok(mut transform) = q_image.get_mut(*child) {
+        if let Ok(mut transform) = q_image.get_mut(child) {
             transform.translation.x -= 4.0;
             transform.translation.y += 4.0;
         }
-        if let Ok(mut image) = w_image.get_mut(*child) {
+        if let Ok(mut image) = w_image.get_mut(child) {
             image.color = Color::Srgba(YELLOW);
         }
     }
@@ -679,14 +685,14 @@ fn on_not_selected(
     mut q_image: Query<&mut Transform, (With<ColorImage>, Without<WhiteImage>)>,
     mut w_image: Query<&mut Sprite, (With<WhiteImage>, Without<ColorImage>)>,
 ) {
-    let children = query.get(trigger.entity()).unwrap();
+    let children = query.get(trigger.target()).unwrap();
 
     for child in children.iter() {
-        if let Ok(mut transform) = q_image.get_mut(*child) {
+        if let Ok(mut transform) = q_image.get_mut(child) {
             transform.translation.x += 4.0;
             transform.translation.y -= 4.0;
         }
-        if let Ok(mut image) = w_image.get_mut(*child) {
+        if let Ok(mut image) = w_image.get_mut(child) {
             image.color = Color::Srgba(Srgba::WHITE);
         }
     }
@@ -697,10 +703,10 @@ fn on_add_move_start(
     query: Query<&MoveTogether>,
     mut commands: Commands,
 ) {
-    let move_together = query.get(trigger.entity()).unwrap();
-    commands.entity(trigger.entity()).insert(Selected);
+    let move_together = query.get(trigger.target()).unwrap();
+    commands.entity(trigger.target()).insert(Selected);
     for entity in move_together.iter() {
-        if entity == &trigger.entity() {
+        if entity == &trigger.target() {
             continue;
         }
         commands.entity(*entity).insert(Selected);
@@ -712,8 +718,8 @@ fn on_remove_move_start(
     query: Query<&MoveTogether>,
     mut commands: Commands,
 ) {
-    let move_together = query.get(trigger.entity()).unwrap();
-    commands.entity(trigger.entity()).remove::<Selected>();
+    let move_together = query.get(trigger.target()).unwrap();
+    commands.entity(trigger.target()).remove::<Selected>();
     for entity in move_together.iter() {
         commands.entity(*entity).remove::<Selected>();
     }
@@ -770,19 +776,23 @@ fn shuffle_pieces(
     mut shuffle_events: EventReader<Shuffle>,
     mut query: Query<(&Piece, &mut Transform)>,
     window: Single<&Window>,
-    camera: Single<&OrthographicProjection, (With<Camera2d>, With<IsDefaultUiCamera>)>,
+    projection: Single<&Projection, (With<Camera2d>, With<IsDefaultUiCamera>)>,
 ) {
     for event in shuffle_events.read() {
+        let Projection::Orthographic(projection) = &**projection else {
+            return;
+        };
         match event {
             Shuffle::Random => {
                 for (piece, mut transform) in &mut query.iter_mut() {
-                    let random_pos = random_position(piece, window.resolution.size(), camera.scale);
+                    let random_pos =
+                        random_position(piece, window.resolution.size(), projection.scale);
                     transform.translation = random_pos.extend(piece.index as f32);
                 }
             }
             Shuffle::Edge => {
                 for (piece, mut transform) in &mut query.iter_mut() {
-                    let edge_pos = edge_position(piece, window.resolution.size(), camera.scale);
+                    let edge_pos = edge_position(piece, window.resolution.size(), projection.scale);
                     transform.translation = edge_pos.extend(piece.index as f32);
                 }
             }
@@ -927,7 +937,7 @@ fn setup_game_ui(
                 ..default()
             },
             OnPlayScreen,
-            PickingBehavior::IGNORE,
+            Pickable::IGNORE,
         ))
         .id();
 
@@ -942,7 +952,7 @@ fn setup_game_ui(
                     margin: UiRect::axes(Val::Px(15.), Val::Px(5.)),
                     ..default()
                 },
-                PickingBehavior::IGNORE,
+                Pickable::IGNORE,
             ))
             .with_children(|builder| {
                 // top left
@@ -1134,7 +1144,7 @@ fn setup_game_ui(
                 margin: UiRect::axes(Val::Px(5.), Val::Px(5.)),
                 ..default()
             },
-            PickingBehavior::IGNORE,
+            Pickable::IGNORE,
         ))
         .with_children(|builder| {
             // top right
@@ -1214,11 +1224,7 @@ fn setup_game_ui(
                     },
                     FullscreenButton,
                 ))
-                .observe(
-                    |_trigger: Trigger<Pointer<Click>>, mut window: Single<&mut Window>| {
-                        window.mode = WindowMode::Fullscreen(MonitorSelection::Current);
-                    },
-                );
+                .observe(toggle_fullscreen);
             });
         })
         .id();
@@ -1227,6 +1233,20 @@ fn setup_game_ui(
         .add_children(&[left_column, right_column]);
 
     commands.send_event(Shuffle::Random);
+}
+
+fn toggle_fullscreen(_trigger: Trigger<Pointer<Click>>, window: Single<(Entity, &mut Window)>) {
+    let (entity, mut window) = window.into_inner();
+    window.mode = match window.mode {
+        WindowMode::Windowed => WindowMode::Fullscreen(
+            MonitorSelection::Entity(entity),
+            VideoModeSelection::Current,
+        ),
+        _ => {
+            std::thread::sleep(std::time::Duration::from_secs(4));
+            WindowMode::Windowed
+        }
+    };
 }
 
 #[derive(Component)]
@@ -1238,15 +1258,18 @@ pub struct BoardBackgroundImage;
 /// Adjust the camera to fit the image
 fn adjust_camera_on_added_sprite(
     _sprite: Single<Entity, Added<BoardBackgroundImage>>,
-    mut camera_2d: Single<&mut OrthographicProjection, (With<Camera2d>, With<IsDefaultUiCamera>)>,
+    mut projection: Single<&mut Projection, (With<Camera2d>, With<IsDefaultUiCamera>)>,
     window: Single<&Window>,
     generator: Res<JigsawPuzzleGenerator>,
 ) {
+    let Projection::Orthographic(projection) = &mut **projection else {
+        return;
+    };
     let window_width = window.resolution.width();
     let image_width = generator.origin_image().width() as f32;
     let scale = image_width / window_width;
     let target_scale = scale / 0.6;
-    camera_2d.scale = target_scale;
+    projection.scale = target_scale;
 }
 
 #[derive(Event)]
@@ -1258,13 +1281,16 @@ const MIN_SCALE: f32 = 0.5;
 /// Adjust the camera scale on event
 fn adjust_camera_scale(
     mut event: EventReader<AdjustScale>,
-    mut camera_2d: Single<&mut OrthographicProjection, (With<Camera2d>, With<IsDefaultUiCamera>)>,
+    mut projection: Single<&mut Projection, (With<Camera2d>, With<IsDefaultUiCamera>)>,
 ) {
     for AdjustScale(scale) in event.read() {
-        let new_scale = camera_2d.scale + scale;
+        let Projection::Orthographic(projection) = &mut **projection else {
+            return;
+        };
+        let new_scale = projection.scale + scale;
         debug!("new scale: {}", new_scale);
         if (MIN_SCALE..=MAX_SCALE).contains(&new_scale) {
-            camera_2d.scale = new_scale;
+            projection.scale = new_scale;
         }
     }
 }
