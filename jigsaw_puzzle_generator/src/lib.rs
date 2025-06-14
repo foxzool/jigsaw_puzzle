@@ -2,9 +2,9 @@
 //! given rectangular image. It provides three public functions:
 //!
 //! - [`JigsawGenerator::generate`] returns the paths from a given number of pieces in a column and a
-//!     row. This is the function you normally want to use
+//!   row. This is the function you normally want to use
 //! - [`generate_columns_rows_numbers`] returns an ideal distribution of pieces on the x- and y-axes
-//!     for a given total number of pieces
+//!   for a given total number of pieces
 //! - [`round`] is a util function which approximately rounds a f32 value to two decimal places
 
 use anyhow::{anyhow, Result};

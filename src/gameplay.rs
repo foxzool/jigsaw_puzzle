@@ -1243,7 +1243,7 @@ fn toggle_fullscreen(_trigger: Trigger<Pointer<Click>>, window: Single<(Entity, 
             VideoModeSelection::Current,
         ),
         _ => {
-            std::thread::sleep(std::time::Duration::from_secs(4));
+            std::thread::sleep(core::time::Duration::from_secs(4));
             WindowMode::Windowed
         }
     };
@@ -1366,7 +1366,7 @@ fn handle_toggle_puzzle_hint(
         let mut first_entity = None;
         let mut second_entity = None;
         'f1: for (entity, piece, move_together) in piece_query.iter() {
-            if move_together.len() > 0 {
+            if !move_together.is_empty() {
                 continue 'f1;
             }
             first_piece = Some(piece);
@@ -1375,7 +1375,7 @@ fn handle_toggle_puzzle_hint(
         }
         if let Some(first_piece) = first_piece {
             'f2: for (entity, piece, move_together) in piece_query.iter() {
-                if move_together.len() > 0 {
+                if !move_together.is_empty() {
                     continue 'f2;
                 }
                 if first_piece.beside(piece) {
