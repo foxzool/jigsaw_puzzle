@@ -58,7 +58,7 @@ struct TextColorProperty;
 impl AnimatableProperty for TextColorProperty {
     type Property = Srgba;
 
-    fn evaluator_id(&'_ self) -> EvaluatorId {
+    fn evaluator_id(&'_ self) -> EvaluatorId<'_> {
         EvaluatorId::Type(TypeId::of::<Self>())
     }
 
@@ -420,8 +420,7 @@ fn setup_menu(
                     TextColor(Color::BLACK),
                 ))
                 .observe(
-                    |_trigger: On<Pointer<Click>>,
-                     mut app_state: ResMut<NextState<AppState>>| {
+                    |_trigger: On<Pointer<Click>>, mut app_state: ResMut<NextState<AppState>>| {
                         app_state.set(AppState::Gameplay);
                     },
                 );

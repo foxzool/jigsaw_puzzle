@@ -190,8 +190,7 @@ fn setup_finish_ui(
                 TextColor(Color::srgb(0.9, 0.9, 0.9)),
             ))
             .observe(
-                |_trigger: On<Pointer<Click>>,
-                 mut next_state: ResMut<NextState<GameState>>| {
+                |_trigger: On<Pointer<Click>>, mut next_state: ResMut<NextState<GameState>>| {
                     next_state.set(GameState::Setup);
                 },
             );
@@ -266,7 +265,6 @@ pub struct OnGeneratingScreen;
 
 #[derive(Debug, Resource, Deref, DerefMut, Clone)]
 pub struct JigsawPuzzleGenerator(pub JigsawGenerator);
-
 
 #[derive(Component)]
 struct CropTask(Task<CommandQueue>);
@@ -1208,8 +1206,7 @@ fn setup_game_ui(
                     PauseButton,
                 ))
                 .observe(
-                    |_trigger: On<Pointer<Click>>,
-                     mut game_state: ResMut<NextState<GameState>>| {
+                    |_trigger: On<Pointer<Click>>, mut game_state: ResMut<NextState<GameState>>| {
                         game_state.set(GameState::Pause);
                     },
                 );

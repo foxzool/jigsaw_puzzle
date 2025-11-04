@@ -1,7 +1,7 @@
 use bevy::asset::AssetMetaCheck;
+use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
 use core::fmt::Formatter;
-use bevy::camera::visibility::RenderLayers;
 use jigsaw_puzzle_generator::{GameMode, JigsawPiece};
 
 mod gameplay;
