@@ -58,7 +58,7 @@ struct TextColorProperty;
 impl AnimatableProperty for TextColorProperty {
     type Property = Srgba;
 
-    fn evaluator_id(&self) -> EvaluatorId {
+    fn evaluator_id(&'_ self) -> EvaluatorId {
         EvaluatorId::Type(TypeId::of::<Self>())
     }
 
@@ -88,7 +88,7 @@ struct HiddenItem;
 
 #[allow(clippy::too_many_arguments)]
 fn show_title(
-    _trigger: Trigger<ShowTitleAnime>,
+    _trigger: On<ShowTitleAnime>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut animations: ResMut<Assets<AnimationClip>>,
@@ -107,7 +107,7 @@ fn show_title(
         font_size: 55.0,
         ..default()
     };
-    let text_justification = JustifyText::Center;
+    let text_justification = Justify::Center;
 
     let start_pos = (
         window.width() / -2.0 + window.width() * 0.2,
@@ -280,7 +280,7 @@ fn setup_menu(
                             },
                         ))
                         .observe(
-                            |_trigger: Trigger<Pointer<Click>>,
+                            |_trigger: On<Pointer<Click>>,
                              mut select_piece: ResMut<SelectPiece>| {
                                 select_piece.previous();
                             },
@@ -309,7 +309,7 @@ fn setup_menu(
                             },
                         ))
                         .observe(
-                            |_trigger: Trigger<Pointer<Click>>,
+                            |_trigger: On<Pointer<Click>>,
                              mut select_piece: ResMut<SelectPiece>| {
                                 select_piece.next();
                             },
@@ -355,7 +355,7 @@ fn setup_menu(
                             },
                         ))
                         .observe(
-                            |_trigger: Trigger<Pointer<Click>>,
+                            |_trigger: On<Pointer<Click>>,
                              mut select_mode: ResMut<SelectGameMode>| {
                                 select_mode.previous();
                             },
@@ -384,7 +384,7 @@ fn setup_menu(
                             },
                         ))
                         .observe(
-                            |_trigger: Trigger<Pointer<Click>>,
+                            |_trigger: On<Pointer<Click>>,
                              mut select_mode: ResMut<SelectGameMode>| {
                                 select_mode.next();
                             },
@@ -395,7 +395,7 @@ fn setup_menu(
                 // start button
                 p.spawn((
                     Button,
-                    BorderColor(Color::BLACK),
+                    BorderColor::all(Color::BLACK),
                     BorderRadius::MAX,
                     Node {
                         width: Val::Px(150.0),
@@ -420,7 +420,7 @@ fn setup_menu(
                     TextColor(Color::BLACK),
                 ))
                 .observe(
-                    |_trigger: Trigger<Pointer<Click>>,
+                    |_trigger: On<Pointer<Click>>,
                      mut app_state: ResMut<NextState<AppState>>| {
                         app_state.set(AppState::Gameplay);
                     },
@@ -508,7 +508,7 @@ fn setup_menu(
     commands.insert_resource(MenuTimer(Timer::from_seconds(2.9, TimerMode::Once)));
 }
 
-fn windows_resize_event(mut commands: Commands, mut resize_events: EventReader<WindowResized>) {
+fn windows_resize_event(mut commands: Commands, mut resize_events: MessageReader<WindowResized>) {
     for _ev in resize_events.read() {
         commands.trigger(ShowTitleAnime);
     }
@@ -603,14 +603,14 @@ fn show_images(
                 // },
             ))
             .observe(
-                |trigger: Trigger<Pointer<Click>>,
+                |trigger: On<Pointer<Click>>,
                  mut origin_image: ResMut<OriginImage>,
                  dragging: Res<Dragging>,
                  image_query: Query<&ImageNode>| {
                     if dragging.0 {
                         return;
                     }
-                    let image = image_query.get(trigger.target()).unwrap();
+                    let image = image_query.get(trigger.entity).unwrap();
                     origin_image.0 = image.image.clone();
                 },
             )
@@ -647,16 +647,16 @@ fn update_piece_text(
 #[derive(Resource, Default)]
 struct Dragging(bool);
 
-fn drag_start(_trigger: Trigger<Pointer<DragStart>>, mut dragging: ResMut<Dragging>) {
+fn drag_start(_trigger: On<Pointer<DragStart>>, mut dragging: ResMut<Dragging>) {
     dragging.0 = true;
 }
 
-fn drag_end(_trigger: Trigger<Pointer<DragEnd>>, mut dragging: ResMut<Dragging>) {
+fn drag_end(_trigger: On<Pointer<DragEnd>>, mut dragging: ResMut<Dragging>) {
     dragging.0 = false;
 }
 
 fn drag_images_collection(
-    trigger: Trigger<Pointer<Drag>>,
+    trigger: On<Pointer<Drag>>,
     container: Single<(&mut Node, &ComputedNode, &Children), With<ImagesContainer>>,
     compute_node: Query<&ComputedNode>,
 ) {

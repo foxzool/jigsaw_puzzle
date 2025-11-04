@@ -13,7 +13,7 @@ use bevy::time::Stopwatch;
 use bevy::window::WindowMode;
 use core::ops::DerefMut;
 use jigsaw_puzzle_generator::image::GenericImageView;
-use jigsaw_puzzle_generator::{JigsawGenerator, JigsawPiece, JigsawTemplate};
+use jigsaw_puzzle_generator::{JigsawGenerator, JigsawPiece};
 use log::debug;
 use rand::Rng;
 
@@ -50,12 +50,12 @@ pub(super) fn plugin(app: &mut App) {
         .add_systems(Update, back_to_game.run_if(in_state(GameState::Pause)));
 
     // play logic
-    app.add_event::<Shuffle>()
+    app.add_message::<Shuffle>()
         .add_systems(OnEnter(GameState::Play), setup_game_ui)
-        .add_event::<AdjustScale>()
-        .add_event::<ToggleBackgroundHint>()
-        .add_event::<TogglePuzzleHint>()
-        .add_event::<ToggleEdgeHint>()
+        .add_message::<AdjustScale>()
+        .add_message::<ToggleBackgroundHint>()
+        .add_message::<TogglePuzzleHint>()
+        .add_message::<ToggleEdgeHint>()
         .add_systems(
             Update,
             (
@@ -146,7 +146,7 @@ fn setup_finish_ui(
                     align_items: AlignItems::Center,
                     ..default()
                 },
-                BorderColor(Color::BLACK),
+                BorderColor::all(Color::BLACK),
                 BorderRadius::MAX,
                 BackgroundColor(NORMAL_BUTTON),
             ))
@@ -160,7 +160,7 @@ fn setup_finish_ui(
                 TextColor(Color::srgb(0.9, 0.9, 0.9)),
             ))
             .observe(
-                |_trigger: Trigger<Pointer<Click>>, mut next_state: ResMut<NextState<AppState>>| {
+                |_trigger: On<Pointer<Click>>, mut next_state: ResMut<NextState<AppState>>| {
                     next_state.set(AppState::MainMenu);
                 },
             );
@@ -176,7 +176,7 @@ fn setup_finish_ui(
                     align_items: AlignItems::Center,
                     ..default()
                 },
-                BorderColor(Color::BLACK),
+                BorderColor::all(Color::BLACK),
                 BorderRadius::MAX,
                 BackgroundColor(NORMAL_BUTTON),
             ))
@@ -190,7 +190,7 @@ fn setup_finish_ui(
                 TextColor(Color::srgb(0.9, 0.9, 0.9)),
             ))
             .observe(
-                |_trigger: Trigger<Pointer<Click>>,
+                |_trigger: On<Pointer<Click>>,
                  mut next_state: ResMut<NextState<GameState>>| {
                     next_state.set(GameState::Setup);
                 },
@@ -267,8 +267,6 @@ pub struct OnGeneratingScreen;
 #[derive(Debug, Resource, Deref, DerefMut, Clone)]
 pub struct JigsawPuzzleGenerator(pub JigsawGenerator);
 
-#[derive(Debug, Resource, Deref, DerefMut)]
-pub struct JigsawPuzzleTemplate(pub JigsawTemplate);
 
 #[derive(Component)]
 struct CropTask(Task<CommandQueue>);
@@ -339,7 +337,6 @@ fn spawn_piece(
                         ));
                         let color_sprite = Sprite {
                             image,
-                            anchor: Anchor::TopLeft,
                             custom_size: Some(Vec2::new(
                                 piece.crop_width as f32,
                                 piece.crop_height as f32,
@@ -351,6 +348,7 @@ fn spawn_piece(
                             .spawn((
                                 Pickable::default(),
                                 ColorImage,
+                                Anchor::TOP_LEFT,
                                 color_sprite,
                                 Transform::from_xyz(
                                     -piece.calc_offset().0,
@@ -361,7 +359,6 @@ fn spawn_piece(
                             .id();
                         let white_sprite = Sprite {
                             image: white_image,
-                            anchor: Anchor::TopLeft,
                             custom_size: Some(Vec2::new(
                                 piece.crop_width as f32,
                                 piece.crop_height as f32,
@@ -372,6 +369,7 @@ fn spawn_piece(
                             .spawn((
                                 WhiteImage,
                                 white_sprite,
+                                Anchor::TOP_LEFT,
                                 Transform::from_xyz(
                                     -piece.calc_offset().0,
                                     piece.calc_offset().1,
@@ -391,7 +389,7 @@ fn spawn_piece(
                 commands.entity(entity).insert(CropTask(task));
             }
         }
-        commands.send_event(Shuffle::Random);
+        commands.write_message(Shuffle::Random);
     };
 }
 
@@ -446,19 +444,19 @@ struct MoveStart {
 }
 
 fn on_drag_start(
-    trigger: Trigger<Pointer<DragStart>>,
+    trigger: On<Pointer<DragStart>>,
     mut piece: Query<&mut Transform, With<Piece>>,
     camera: Single<(&Camera, &GlobalTransform), (With<Camera2d>, With<IsDefaultUiCamera>)>,
     mut commands: Commands,
 ) {
-    if let Ok(mut transform) = piece.get_mut(trigger.target()) {
+    if let Ok(mut transform) = piece.get_mut(trigger.entity) {
         let click_position = trigger.event().pointer_location.position;
         let (camera, camera_global_transform) = camera.into_inner();
         let point = camera
             .viewport_to_world_2d(camera_global_transform, click_position)
             .unwrap();
         transform.translation.z = 100.0;
-        commands.entity(trigger.target()).insert(MoveStart {
+        commands.entity(trigger.entity).insert(MoveStart {
             image_position: *transform,
             click_position: point,
         });
@@ -466,24 +464,24 @@ fn on_drag_start(
 }
 
 fn on_drag_end(
-    trigger: Trigger<Pointer<DragEnd>>,
+    trigger: On<Pointer<DragEnd>>,
     mut image: Query<&mut Transform, (With<MoveStart>, With<Piece>)>,
     mut commands: Commands,
 ) {
-    if let Ok(mut transform) = image.get_mut(trigger.target()) {
+    if let Ok(mut transform) = image.get_mut(trigger.entity) {
         transform.translation.z = 0.0;
-        commands.entity(trigger.target()).remove::<MoveStart>();
-        commands.trigger_targets(MoveEnd, vec![trigger.target()]);
+        commands.entity(trigger.entity).remove::<MoveStart>();
+        commands.trigger(MoveEnd(trigger.entity));
     }
 }
 
 fn on_click_piece(
-    trigger: Trigger<Pointer<Click>>,
+    trigger: On<Pointer<Click>>,
     mut image: Query<(&mut Transform, Option<&MoveStart>), With<Piece>>,
     camera: Single<(&Camera, &GlobalTransform), (With<Camera2d>, With<IsDefaultUiCamera>)>,
     mut commands: Commands,
 ) {
-    if let Ok((mut transform, opt_moveable)) = image.get_mut(trigger.target()) {
+    if let Ok((mut transform, opt_moveable)) = image.get_mut(trigger.entity) {
         let click_position = trigger.event().pointer_location.position;
         let (camera, camera_global_transform) = camera.into_inner();
         let point = camera
@@ -492,11 +490,11 @@ fn on_click_piece(
 
         if opt_moveable.is_some() {
             transform.translation.z = 0.0;
-            commands.entity(trigger.target()).remove::<MoveStart>();
-            commands.trigger_targets(MoveEnd, vec![trigger.target()]);
+            commands.entity(trigger.entity).remove::<MoveStart>();
+            commands.trigger(MoveEnd(trigger.entity));
         } else {
             transform.translation.z = 100.0;
-            commands.entity(trigger.target()).insert(MoveStart {
+            commands.entity(trigger.entity).insert(MoveStart {
                 image_position: *transform,
                 click_position: point,
             });
@@ -531,21 +529,21 @@ fn move_piece(
     }
 }
 
-#[derive(Event)]
-struct MoveEnd;
+#[derive(EntityEvent)]
+struct MoveEnd(Entity);
 
 #[derive(Component, Deref, DerefMut, Default)]
 pub struct MoveTogether(pub HashSet<Entity>);
 
 fn on_move_end(
-    trigger: Trigger<MoveEnd>,
+    trigger: On<MoveEnd>,
     generator: Res<JigsawPuzzleGenerator>,
     mut query: Query<(Entity, &Piece, &mut Transform, &mut MoveTogether)>,
     mut commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
     let mut iter = query.iter_combinations_mut();
-    let end_entity = trigger.target();
+    let end_entity = trigger.0;
 
     let mut all_entities = HashSet::default();
     let mut max_z = 0f32;
@@ -627,7 +625,7 @@ fn on_move_end(
         next_state.set(GameState::Finish);
     }
 
-    if let Ok((_e, _p, mut transform, _together)) = query.get_mut(trigger.target()) {
+    if let Ok((_e, _p, mut transform, _together)) = query.get_mut(trigger.0) {
         transform.translation.z = max_z + 1.0;
     }
 
@@ -637,7 +635,7 @@ fn on_move_end(
 #[derive(Event)]
 struct CombineTogether(HashSet<Entity>);
 
-fn combine_together(trigger: Trigger<CombineTogether>, mut query: Query<&mut MoveTogether>) {
+fn combine_together(trigger: On<CombineTogether>, mut query: Query<&mut MoveTogether>) {
     let entities: Vec<Entity> = trigger.event().0.iter().cloned().collect();
     let mut together_iter = query.iter_many_mut(&entities);
     while let Some(mut move_together) = together_iter.fetch_next() {
@@ -661,12 +659,12 @@ fn cancel_all_move(
 pub struct Selected;
 
 fn on_selected(
-    trigger: Trigger<OnInsert, Selected>,
+    trigger: On<Insert, Selected>,
     query: Query<&Children>,
     mut q_image: Query<&mut Transform, (With<ColorImage>, Without<WhiteImage>)>,
     mut w_image: Query<&mut Sprite, (With<WhiteImage>, Without<ColorImage>)>,
 ) {
-    let children = query.get(trigger.target()).unwrap();
+    let children = query.get(trigger.entity).unwrap();
 
     for child in children.iter() {
         if let Ok(mut transform) = q_image.get_mut(child) {
@@ -680,12 +678,12 @@ fn on_selected(
 }
 
 fn on_not_selected(
-    trigger: Trigger<OnRemove, Selected>,
+    trigger: On<Remove, Selected>,
     query: Query<&Children>,
     mut q_image: Query<&mut Transform, (With<ColorImage>, Without<WhiteImage>)>,
     mut w_image: Query<&mut Sprite, (With<WhiteImage>, Without<ColorImage>)>,
 ) {
-    let children = query.get(trigger.target()).unwrap();
+    let children = query.get(trigger.entity).unwrap();
 
     for child in children.iter() {
         if let Ok(mut transform) = q_image.get_mut(child) {
@@ -699,14 +697,14 @@ fn on_not_selected(
 }
 
 fn on_add_move_start(
-    trigger: Trigger<OnInsert, MoveStart>,
+    trigger: On<Insert, MoveStart>,
     query: Query<&MoveTogether>,
     mut commands: Commands,
 ) {
-    let move_together = query.get(trigger.target()).unwrap();
-    commands.entity(trigger.target()).insert(Selected);
+    let move_together = query.get(trigger.entity).unwrap();
+    commands.entity(trigger.entity).insert(Selected);
     for entity in move_together.iter() {
-        if entity == &trigger.target() {
+        if entity == &trigger.entity {
             continue;
         }
         commands.entity(*entity).insert(Selected);
@@ -714,12 +712,12 @@ fn on_add_move_start(
 }
 
 fn on_remove_move_start(
-    trigger: Trigger<OnRemove, MoveStart>,
+    trigger: On<Remove, MoveStart>,
     query: Query<&MoveTogether>,
     mut commands: Commands,
 ) {
-    let move_together = query.get(trigger.target()).unwrap();
-    commands.entity(trigger.target()).remove::<Selected>();
+    let move_together = query.get(trigger.entity).unwrap();
+    commands.entity(trigger.entity).remove::<Selected>();
     for entity in move_together.iter() {
         commands.entity(*entity).remove::<Selected>();
     }
@@ -766,14 +764,14 @@ fn edge_position(piece: &JigsawPiece, window_size: Vec2, scale: f32) -> Vec2 {
     Vec2::new(x, y)
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub enum Shuffle {
     Random,
     Edge,
 }
 
 fn shuffle_pieces(
-    mut shuffle_events: EventReader<Shuffle>,
+    mut shuffle_events: MessageReader<Shuffle>,
     mut query: Query<(&Piece, &mut Transform)>,
     window: Single<&Window>,
     projection: Single<&Projection, (With<Camera2d>, With<IsDefaultUiCamera>)>,
@@ -882,7 +880,7 @@ fn setup_pause_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
             OnPauseScreen,
         ))
         .observe(
-            |_trigger: Trigger<Pointer<Click>>, mut game_state: ResMut<NextState<GameState>>| {
+            |_trigger: On<Pointer<Click>>, mut game_state: ResMut<NextState<GameState>>| {
                 game_state.set(GameState::Play);
             },
         )
@@ -978,7 +976,7 @@ fn setup_game_ui(
                                 MenuIcon,
                             ))
                             .observe(
-                                |_trigger: Trigger<Pointer<Click>>, mut next_state: ResMut<NextState<GameState>>| {
+                                |_trigger: On<Pointer<Click>>, mut next_state: ResMut<NextState<GameState>>| {
                                     next_state.set(GameState::Finish);
                                 },);
 
@@ -993,8 +991,8 @@ fn setup_game_ui(
                                 MenuIcon,
                             ))
                             .observe(
-                                |_trigger: Trigger<Pointer<Click>>, mut commands: Commands| {
-                                    commands.send_event(Shuffle::Edge);
+                                |_trigger: On<Pointer<Click>>, mut commands: Commands| {
+                                    commands.write_message(Shuffle::Edge);
                                 },
                             );
 
@@ -1019,8 +1017,8 @@ fn setup_game_ui(
                                     },
                                     ZoomOutButton,
                                 )).observe(
-                                    |_trigger: Trigger<Pointer<Click>>, mut commands: Commands| {
-                                        commands.send_event(AdjustScale(0.1));
+                                    |_trigger: On<Pointer<Click>>, mut commands: Commands| {
+                                        commands.write_message(AdjustScale(0.1));
                                     },
                                 );
 
@@ -1038,8 +1036,8 @@ fn setup_game_ui(
                                     },
                                     ZoomInButton,
                                 )).observe(
-                                    |_trigger: Trigger<Pointer<Click>>, mut commands: Commands| {
-                                        commands.send_event(AdjustScale(-0.1));
+                                    |_trigger: On<Pointer<Click>>, mut commands: Commands| {
+                                        commands.write_message(AdjustScale(-0.1));
                                     },
                                 );
                             });
@@ -1058,8 +1056,8 @@ fn setup_game_ui(
                         IdeaButton,
                     ))
                     .observe(
-                        |_trigger: Trigger<Pointer<Click>>, mut commands: Commands| {
-                            commands.send_event(TogglePuzzleHint);
+                        |_trigger: On<Pointer<Click>>, mut commands: Commands| {
+                            commands.write_message(TogglePuzzleHint);
                         },
                     );
 
@@ -1111,8 +1109,8 @@ fn setup_game_ui(
                             ));
                         })
                         .observe(
-                            |_trigger: Trigger<Pointer<Click>>, mut commands: Commands| {
-                                commands.send_event(ToggleEdgeHint);
+                            |_trigger: On<Pointer<Click>>, mut commands: Commands| {
+                                commands.write_message(ToggleEdgeHint);
                             },
                         );
 
@@ -1127,8 +1125,8 @@ fn setup_game_ui(
                         BackgroundHintButton,
                     ))
                     .observe(
-                        |_trigger: Trigger<Pointer<Click>>, mut commands: Commands| {
-                            commands.send_event(ToggleBackgroundHint);
+                        |_trigger: On<Pointer<Click>>, mut commands: Commands| {
+                            commands.write_message(ToggleBackgroundHint);
                         },
                     );
                 });
@@ -1210,7 +1208,7 @@ fn setup_game_ui(
                     PauseButton,
                 ))
                 .observe(
-                    |_trigger: Trigger<Pointer<Click>>,
+                    |_trigger: On<Pointer<Click>>,
                      mut game_state: ResMut<NextState<GameState>>| {
                         game_state.set(GameState::Pause);
                     },
@@ -1232,10 +1230,10 @@ fn setup_game_ui(
         .entity(root_node)
         .add_children(&[left_column, right_column]);
 
-    commands.send_event(Shuffle::Random);
+    commands.write_message(Shuffle::Random);
 }
 
-fn toggle_fullscreen(_trigger: Trigger<Pointer<Click>>, window: Single<(Entity, &mut Window)>) {
+fn toggle_fullscreen(_trigger: On<Pointer<Click>>, window: Single<(Entity, &mut Window)>) {
     let (entity, mut window) = window.into_inner();
     window.mode = match window.mode {
         WindowMode::Windowed => WindowMode::Fullscreen(
@@ -1272,7 +1270,7 @@ fn adjust_camera_on_added_sprite(
     projection.scale = target_scale;
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct AdjustScale(pub f32);
 
 const MAX_SCALE: f32 = 3.0;
@@ -1280,7 +1278,7 @@ const MIN_SCALE: f32 = 0.5;
 
 /// Adjust the camera scale on event
 fn adjust_camera_scale(
-    mut event: EventReader<AdjustScale>,
+    mut event: MessageReader<AdjustScale>,
     mut projection: Single<&mut Projection, (With<Camera2d>, With<IsDefaultUiCamera>)>,
 ) {
     for AdjustScale(scale) in event.read() {
@@ -1310,36 +1308,36 @@ fn handle_keyboard_input(
     mut game_state: ResMut<NextState<GameState>>,
 ) {
     if keyboard_input.just_pressed(KeyCode::PageUp) {
-        commands.send_event(AdjustScale(0.1));
+        commands.write_message(AdjustScale(0.1));
     } else if keyboard_input.just_pressed(KeyCode::PageDown) {
-        commands.send_event(AdjustScale(-0.1));
+        commands.write_message(AdjustScale(-0.1));
     } else if keyboard_input.just_pressed(KeyCode::Space) {
-        commands.send_event(ToggleBackgroundHint);
+        commands.write_message(ToggleBackgroundHint);
     } else if keyboard_input.just_pressed(KeyCode::KeyH) {
-        commands.send_event(TogglePuzzleHint);
+        commands.write_message(TogglePuzzleHint);
     } else if keyboard_input.just_pressed(KeyCode::KeyE) {
-        commands.send_event(Shuffle::Edge);
+        commands.write_message(Shuffle::Edge);
     } else if keyboard_input.just_pressed(KeyCode::KeyR) {
-        commands.send_event(Shuffle::Random);
+        commands.write_message(Shuffle::Random);
     } else if keyboard_input.just_pressed(KeyCode::KeyQ) {
         game_state.set(GameState::Finish);
     }
 }
 
 fn handle_mouse_wheel_input(
-    mut mouse_wheel_input: EventReader<MouseWheel>,
+    mut mouse_wheel_input: MessageReader<MouseWheel>,
     mut commands: Commands,
 ) {
     for event in mouse_wheel_input.read() {
-        commands.send_event(AdjustScale(event.y * 0.1));
+        commands.write_message(AdjustScale(event.y * 0.1));
     }
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct ToggleBackgroundHint;
 
 fn handle_toggle_background_hint(
-    mut event: EventReader<ToggleBackgroundHint>,
+    mut event: MessageReader<ToggleBackgroundHint>,
     mut query: Query<&mut Visibility, With<BoardBackgroundImage>>,
 ) {
     for _ in event.read() {
@@ -1349,11 +1347,11 @@ fn handle_toggle_background_hint(
     }
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct TogglePuzzleHint;
 
 fn handle_toggle_puzzle_hint(
-    mut event: EventReader<TogglePuzzleHint>,
+    mut event: MessageReader<TogglePuzzleHint>,
     selected_query: Query<Entity, With<Selected>>,
     piece_query: Query<(Entity, &Piece, &MoveTogether), Without<Selected>>,
     mut commands: Commands,
@@ -1401,11 +1399,11 @@ fn exit_fullscreen_on_esc(mut window: Single<&mut Window>, input: Res<ButtonInpu
     }
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct ToggleEdgeHint;
 
 fn handle_puzzle_hint(
-    mut event: EventReader<ToggleEdgeHint>,
+    mut event: MessageReader<ToggleEdgeHint>,
     mut piece_query: Query<(&Piece, &mut Visibility), Without<PuzzleHintChildButton>>,
     mut ui: Single<&mut Visibility, With<PuzzleHintChildButton>>,
     mut show_all: Local<bool>,
@@ -1431,7 +1429,7 @@ fn handle_puzzle_hint(
 }
 
 fn hint_image_click(
-    _trigger: Trigger<Pointer<Click>>,
+    _trigger: On<Pointer<Click>>,
     mut commands: Commands,
     mut hint_visible: Single<
         &mut Visibility,
@@ -1464,7 +1462,7 @@ fn hint_image_click(
 }
 
 fn hint_small_image_click(
-    _trigger: Trigger<Pointer<Click>>,
+    _trigger: On<Pointer<Click>>,
     mut commands: Commands,
     mut hint: Single<&mut Visibility, (With<HintImageButton>, Without<SmallHintImage>)>,
     small_img: Single<Entity, (With<SmallHintImage>, Without<HintImageButton>)>,

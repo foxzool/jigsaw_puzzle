@@ -36,7 +36,7 @@ alloc_instead_of_core = "warn"
 
 
 [dependencies]
-bevy = { version = "0.16.0", features = ["jpeg"] }
+bevy = { version = "0.17.0", features = ["jpeg"] }
 #bevy = { git = "https://github.com/bevyengine/bevy", features = ["bevy_sprite_picking_backend"] }
 jigsaw_puzzle_generator = { path = "jigsaw_puzzle_generator" }
 rand = "0.8.5"
