@@ -58,10 +58,6 @@ struct TextColorProperty;
 impl AnimatableProperty for TextColorProperty {
     type Property = Srgba;
 
-    fn evaluator_id(&'_ self) -> EvaluatorId<'_> {
-        EvaluatorId::Type(TypeId::of::<Self>())
-    }
-
     fn get_mut<'a>(
         &self,
         entity: &'a mut AnimationEntityMut,
@@ -80,6 +76,10 @@ impl AnimatableProperty for TextColorProperty {
             >(
             ))),
         }
+    }
+
+    fn evaluator_id(&'_ self) -> EvaluatorId<'_> {
+        EvaluatorId::Type(TypeId::of::<Self>())
     }
 }
 

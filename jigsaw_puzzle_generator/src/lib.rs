@@ -469,7 +469,7 @@ fn find_divisors(num: usize) -> Vec<(usize, usize)> {
     loop {
         if i * i > num {
             break;
-        } else if num % i == 0 {
+        } else if num.is_multiple_of(i) {
             divisor_pairs.push((i, num / i));
         }
         i += 1;
